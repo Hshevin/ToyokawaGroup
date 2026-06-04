@@ -1,0 +1,40 @@
+﻿{
+  "model_id": "building_unet_efficientnetb0_v1",
+  "asset_file": "optimized/building_unet_efficientnetb0_v1_pruned_ft_s2.pt",
+  "task_type": "segmentation",
+  "target": "building",
+  "input": {
+    "layout": "NCHW",
+    "height": 512,
+    "width": 512,
+    "mean": [
+      0.485,
+      0.456,
+      0.406
+    ],
+    "std": [
+      0.229,
+      0.224,
+      0.225
+    ],
+    "rgb_order": "RGB",
+    "dtype": "float32"
+  },
+  "output": {
+    "type": "binary_segmentation_logits",
+    "shape": [
+      1,
+      1,
+      512,
+      512
+    ],
+    "postprocess": "sigmoid_threshold",
+    "threshold": 0.7499999999999999
+  },
+  "num_classes": 2,
+  "class_names": [
+    "background",
+    "building"
+  ]
+}
+
