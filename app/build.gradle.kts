@@ -5,11 +5,7 @@ plugins {
 
 android {
     namespace = "com.example.skyedge"
-    compileSdk {
-        version = release(35) {
-            minorApiLevel = 1
-        }
-    }
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.example.skyedge"
@@ -18,9 +14,14 @@ android {
         versionCode = 1
         versionName = "1.0"
 
+
+
+
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
-
+    androidResources {
+        noCompress += listOf("pt", "onnx", "tflite")
+    }
     buildTypes {
         release {
             isMinifyEnabled = false
@@ -39,6 +40,8 @@ android {
     }
 }
 
+
+
 dependencies {
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.activity.compose)
@@ -48,6 +51,10 @@ dependencies {
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
+    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
+    implementation("androidx.lifecycle:lifecycle-viewmodel-ktx:2.8.7")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
+    implementation("androidx.exifinterface:exifinterface:1.3.7")
     implementation(libs.pytorch.android)
     implementation(libs.pytorch.android.torchvision)
     implementation("io.coil-kt:coil-compose:2.7.0")

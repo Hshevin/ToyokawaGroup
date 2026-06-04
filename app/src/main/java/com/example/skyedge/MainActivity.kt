@@ -1,148 +1,215 @@
-package com.example.skyedge // 确保包名和你的一致
+package com.example.skyedge
 
 import android.Manifest
-import android.content.Intent
+import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Color
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
-import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.viewModels
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.runtime.*
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import coil.compose.AsyncImage
-import org.pytorch.IValue
-import org.pytorch.Module
-import org.pytorch.Tensor
-import org.pytorch.torchvision.TensorImageUtils
-import java.io.File
-import java.io.FileOutputStream
-import java.io.InputStream
 
 class MainActivity : ComponentActivity() {
 
-    // 1. 定义变量
-    private var module: Module? = null
+    private val viewModel: InferenceViewModel by viewModels()
     private var selectedImageUri by mutableStateOf<Uri?>(null)
-    private var resultText by mutableStateOf("请点击按钮选择图片")
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // 2. 初始化模型 (放在这里是为了只加载一次)
-        try {
-            module = Module.load(assetFilePath(this, "model.pt")) // 这里的名字要和assets里的文件名一致！
-            resultText = "模型加载成功！请选择图片"
-        } catch (e: Exception) {
-            resultText = "模型加载失败: ${e.message}"
-            e.printStackTrace()
-        }
-
         setContent {
+            val uiState = viewModel.uiState
+
+            val galleryLauncher = rememberLauncherForActivityResult(
+                contract = ActivityResultContracts.GetContent(),
+                onResult = { uri: Uri? ->
+                    selectedImageUri = uri
+                    uri?.let { viewModel.infer(it) }
+                },
+            )
+
+            val permissionLauncher = rememberLauncherForActivityResult(
+                contract = ActivityResultContracts.RequestPermission(),
+                onResult = { granted ->
+                    if (granted) {
+                        galleryLauncher.launch("image/*")
+                    } else {
+                        viewModel.updateStatus("需要相册权限才能选择图片")
+                    }
+                },
+            )
+
             Column(
-                modifier = Modifier.fillMaxSize().padding(16.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                Text(text = "低空巡检 AI 原型", style = androidx.compose.material3.MaterialTheme.typography.headlineMedium)
+                Text(
+                    text = "低空巡检 AI 原型",
+                    style = MaterialTheme.typography.headlineMedium,
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    viewModel.modelChoices.forEach { choice ->
+                        Button(
+                            onClick = { viewModel.switchModel(choice.key) },
+                            enabled = !uiState.isInferring && !uiState.isLoadingModel,
+                        ) {
+                            val isSelected = uiState.selectedModelKey == choice.key
+                            Text(if (isSelected) "已选 ${choice.label}" else "切换 ${choice.label}")
+                        }
+                    }
+                }
                 Spacer(modifier = Modifier.height(20.dp))
 
-                // 3. 显示选中的图片
-                selectedImageUri?.let { uri ->
-                    AsyncImage(
-                        model = uri,
-                        contentDescription = "Selected Image",
-                        modifier = Modifier.size(300.dp)
+                val maskPath = uiState.lastMaskPath
+                val overlayBitmap = remember(maskPath) {
+                    buildMaskOverlay(maskPath)
+                }
+                if (selectedImageUri != null) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally),
+                        verticalAlignment = Alignment.Top,
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text("原图", style = MaterialTheme.typography.labelMedium)
+                            Spacer(modifier = Modifier.height(6.dp))
+                            AsyncImage(
+                                model = selectedImageUri,
+                                contentDescription = "Original Image",
+                                modifier = Modifier.size(170.dp),
+                                contentScale = ContentScale.Crop,
+                            )
+                        }
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text("处理后对比", style = MaterialTheme.typography.labelMedium)
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Box(modifier = Modifier.size(170.dp)) {
+                                AsyncImage(
+                                    model = selectedImageUri,
+                                    contentDescription = "Processed Base Image",
+                                    modifier = Modifier.matchParentSize(),
+                                    contentScale = ContentScale.Crop,
+                                )
+                                if (overlayBitmap != null) {
+                                    Image(
+                                        bitmap = overlayBitmap.asImageBitmap(),
+                                        contentDescription = "Mask Overlay",
+                                        modifier = Modifier.matchParentSize(),
+                                        contentScale = ContentScale.Crop,
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(20.dp))
+
+                if (uiState.isLoadingModel || uiState.isInferring) {
+                    CircularProgressIndicator()
+                    Spacer(modifier = Modifier.height(12.dp))
+                }
+
+                Button(
+                    onClick = {
+                        if (needsReadImagesPermission() &&
+                            ContextCompat.checkSelfPermission(
+                                this@MainActivity,
+                                Manifest.permission.READ_MEDIA_IMAGES,
+                            ) != PackageManager.PERMISSION_GRANTED
+                        ) {
+                            permissionLauncher.launch(Manifest.permission.READ_MEDIA_IMAGES)
+                        } else {
+                            galleryLauncher.launch("image/*")
+                        }
+                    },
+                    enabled = uiState.isModelReady && !uiState.isInferring,
+                ) {
+                    Text(
+                        when {
+                            uiState.isLoadingModel -> "模型加载中"
+                            !uiState.isModelReady -> "模型未就绪"
+                            uiState.isInferring -> "推理中"
+                            else -> "导入现场照片"
+                        },
                     )
                 }
 
-                Spacer(modifier = Modifier.height(20.dp))
-
-                // 4. 选择图片按钮
-                val launcher = rememberLauncherForActivityResult(
-                    contract = ActivityResultContracts.GetContent(),
-                    onResult = { uri: Uri? ->
-                        selectedImageUri = uri
-                        // 选中图片后自动触发推理（简化流程）
-                        uri?.let { runInference(it) }
-                    }
-                )
-
-                Button(onClick = {
-                    // 启动相册选择器
-                    launcher.launch("image/*")
-                }) {
-                    Text("导入现场照片")
+                Spacer(modifier = Modifier.height(12.dp))
+                Button(
+                    onClick = {
+                        selectedImageUri?.let { viewModel.benchmarkCurrentImage(it, runs = 10) }
+                    },
+                    enabled = uiState.isModelReady && !uiState.isInferring && selectedImageUri != null,
+                ) {
+                    Text("当前图连跑10次")
                 }
 
                 Spacer(modifier = Modifier.height(20.dp))
-
-                // 5. 显示结果
-                Text(text = resultText)
+                Text(text = uiState.statusMessage)
             }
         }
     }
 
-    // 6. 核心推理函数
-    private fun runInference(uri: Uri) {
-        if (module == null) {
-            resultText = "模型未加载，无法推理"
-            return
-        }
+    private fun needsReadImagesPermission(): Boolean =
+        Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
 
-        try {
-            // A. 将 Uri 转为 Bitmap
-            val bitmap = BitmapFactory.decodeStream(contentResolver.openInputStream(uri))
-
-            // B. 预处理：调整大小并转为 Tensor
-            // 注意：这里的 224 是常见模型的输入尺寸，你需要问算法同学他们的模型输入是多少（比如 256, 512?）
-            val inputTensor = TensorImageUtils.bitmapToFloat32Tensor(
-                bitmap,
-                TensorImageUtils.TORCHVISION_NORM_MEAN_RGB,
-                TensorImageUtils.TORCHVISION_NORM_STD_RGB
-            )
-
-            // C. 执行推理
-            val outputTensor = module!!.forward(IValue.from(inputTensor)).toTensor()
-
-            // D. 解析结果 (这里假设是分类任务，如果是分割任务需要更复杂的处理)
-            val scores = outputTensor.dataAsFloatArray
-            val maxScoreIdx = scores.indices.maxByOrNull { scores[it] } ?: -1
-
-            resultText = "推理完成！\n最大概率类别索引: $maxScoreIdx\n置信度: ${scores[maxScoreIdx]}"
-
-        } catch (e: Exception) {
-            resultText = "推理出错: ${e.message}"
-            e.printStackTrace()
-        }
-    }
-
-    // 辅助函数：从 Assets 复制文件到内部存储（PyTorch Android 需要文件路径）
-    private fun assetFilePath(context: ComponentActivity, assetName: String): String {
-        val file = File(context.filesDir, assetName)
-        if (file.exists() && file.length() > 0) {
-            return file.absolutePath
-        }
-        context.assets.open(assetName).use { inputStream ->
-            FileOutputStream(file).use { outputStream ->
-                val buffer = ByteArray(4 * 1024)
-                var read: Int
-                while (inputStream.read(buffer).also { read = it } != -1) {
-                    outputStream.write(buffer, 0, read)
-                }
-                outputStream.flush()
+    private fun buildMaskOverlay(maskPath: String?): Bitmap? {
+        if (maskPath.isNullOrBlank()) return null
+        val mask = BitmapFactory.decodeFile(maskPath) ?: return null
+        val width = mask.width
+        val height = mask.height
+        val src = IntArray(width * height)
+        val dst = IntArray(width * height)
+        mask.getPixels(src, 0, width, 0, 0, width, height)
+        for (i in src.indices) {
+            val gray = src[i] and 0xFF
+            dst[i] = if (gray > 0) {
+                Color.argb((0.42f * 255).toInt(), 255, 0, 0)
+            } else {
+                Color.TRANSPARENT
             }
-            return file.absolutePath
         }
+        val overlay = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+        overlay.setPixels(dst, 0, width, 0, 0, width, height)
+        mask.recycle()
+        return overlay
     }
 }
