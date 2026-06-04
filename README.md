@@ -1,4 +1,4 @@
-# SkyEdge 端侧模型部署
+# ToyokawaGroup - SkyEdge 端侧模型部署
 
 [ToyokawaGroup](https://github.com/Hshevin/ToyokawaGroup) 小组项目中的**端侧模型部署**部分：在 Android 设备上离线运行航拍建筑物 / 道路分割模型，完成推理、后处理与结果展示。
 
