@@ -1,0 +1,5 @@
+## Copy this file to local.properties and fill in local machine values.
+sdk.dir=/path/to/Android/sdk
+
+## Required for the AMap satellite map.
+AMAP_API_KEY=

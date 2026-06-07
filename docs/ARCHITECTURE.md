@@ -28,6 +28,7 @@ flowchart BT
 ```text
 com.example.skyedge.core/
 ├── api/           # InspectionFacade、InspectionUiState、ModelChoice（UI 契约）
+├── geo/           # GeoTIFF、GeoBounds、WGS84/GCJ-02、geo.json
 ├── impl/          # InspectionFacadeImpl、FakeInspectionFacade
 ├── domain/        # InspectionResult
 ├── model/         # PytorchInferenceEngine、预处理与后处理
@@ -38,10 +39,15 @@ com.example.skyedge.core/
 
 ```text
 com.example.skyedge.ui/
-└── inspection/
-    ├── InspectionScreen.kt
-    ├── InferenceViewModel.kt
-    └── MaskOverlay.kt
+├── inspection/
+│   ├── InspectionScreen.kt
+│   ├── InferenceViewModel.kt
+│   └── MaskOverlay.kt
+└── map/
+    ├── AMapCompose.kt
+    ├── MapScreen.kt
+    ├── MapOverlayManager.kt
+    └── MapViewModel.kt
 ```
 
 ## 运行时调用链
@@ -49,8 +55,10 @@ com.example.skyedge.ui/
 ```mermaid
 sequenceDiagram
     participant Screen as InspectionScreen
+    participant Map as MapScreen
     participant VM as InferenceViewModel
     participant Facade as InspectionFacade
+    participant Geo as GeoTiffReader
     participant Repo as ImageRecordRepository
     participant Analyser as SkyEdgeImageAnalyser
     participant Engine as PytorchInferenceEngine
@@ -63,6 +71,17 @@ sequenceDiagram
     Facade->>Repo: poll until done
     Facade-->>VM: StateFlow update
     VM-->>Screen: collectAsStateWithLifecycle
+
+    Map->>VM: loadGeoTiff(uri)
+    VM->>Facade: loadGeoTiff(uri)
+    Facade->>Geo: decode + bounds
+    Facade-->>Map: mapSession(preview.png, bounds_gcj02)
+    Map->>VM: inferMapSession()
+    VM->>Facade: inferMapSession()
+    Facade->>Repo: insertAt(sessionDir, preview.png, analyseType)
+    Repo->>Analyser: analyse(localUrl, previewUri, ...)
+    Analyser->>Engine: load + infer
+    Facade-->>Map: mask_overlay.png + StateFlow update
 ```
 
 ## InspectionFacade 方法
@@ -71,6 +90,9 @@ sequenceDiagram
 |------|------|-------------------------------|
 | `loadModel` / `switchModel` | 加载 Building / Road TorchScript | 端侧专有 |
 | `infer(uri)` | 登记影像并同步等待分析完成 | `POST .../images` + 轮询至 `done` |
+| `loadGeoTiff(uri)` | 读取 GeoTIFF，生成 `preview.png` 与 `geo.json`，更新 `mapSession` | 端侧专有 |
+| `inferMapSession()` | 对当前地图会话的 `preview.png` 推理，生成 `mask_overlay.png` | 端侧专有 |
+| `setMapLayerVisibility` / `setMaskAlpha` | 控制高德 `GroundOverlay` 展示 | 端侧 UI 状态 |
 | `benchmark(uri, runs)` | 当前图连跑 N 次测时延 | 端侧专有 |
 | `refreshHistory()` | 读取最近 Room 记录 | `GET .../images` |
 | `close()` | 释放 PyTorch 模块 | 端侧专有 |
@@ -85,6 +107,9 @@ sequenceDiagram
 | `defect_area_ratio` | `SegmentationSummary.defect_area_ratio` |
 | `inference_ms` | `SegmentationSummary.inference_ms` |
 | `model_version` | 实际加载的 `.pt` 资产路径 |
+| `geo` | GeoTIFF 元数据：`bounds_wgs84` 为真源，`bounds_gcj02` 用于高德展示 |
+| `geo.ortho_preview_path` | 地图正射 `GroundOverlay` 源图 |
+| `geo.mask_overlay_path` | 与正射同 bounds 的 RGBA mask overlay |
 
 ## 协同开发
 
@@ -96,7 +121,7 @@ sequenceDiagram
 
 1. 在 `InspectionFacade` 增加方法与 `InspectionUiState` 字段。
 2. 在 `InspectionFacadeImpl` 实现业务（可调 `ImageRecordRepository` / `SkyEdgeImageAnalyser`）。
-3. 在 `InspectionScreen` 消费新状态；同步更新 `openapi/api.yaml` 中对应 schema。
+3. 在 `InspectionScreen` / `MapScreen` 消费新状态；同步更新 `openapi/api.yaml` 中对应 schema。
 4. 不引入远程 HTTP；地图瓦片等第三方 SDK 网络除外。
 
 ## 模型资产路径

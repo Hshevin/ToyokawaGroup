@@ -47,6 +47,30 @@ class InferenceViewModel(
         }
     }
 
+    fun loadGeoTiff(uri: Uri) {
+        viewModelScope.launch {
+            facade.loadGeoTiff(uri)
+        }
+    }
+
+    fun inferMapSession() {
+        viewModelScope.launch {
+            facade.inferMapSession()
+        }
+    }
+
+    fun setMapLayerVisibility(showOrtho: Boolean, showMask: Boolean) {
+        facade.setMapLayerVisibility(showOrtho, showMask)
+    }
+
+    fun setMaskAlpha(alpha: Float) {
+        facade.setMaskAlpha(alpha)
+    }
+
+    fun clearMapSession() {
+        facade.clearMapSession()
+    }
+
     fun refreshHistory() {
         facade.refreshHistory()
     }

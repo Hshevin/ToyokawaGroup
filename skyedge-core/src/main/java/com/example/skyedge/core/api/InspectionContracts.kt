@@ -11,6 +11,29 @@ data class InspectionUiState(
     val lastMaskPath: String? = null,
     val selectedModelKey: String = ModelChoice.BUILDING.key,
     val recentRecords: List<InspectionRecordItem> = emptyList(),
+    val mapSession: MapSessionUiModel? = null,
+)
+
+data class GeoLatLngDto(
+    val lat: Double,
+    val lng: Double,
+)
+
+data class GeoBoundsDto(
+    val sw: GeoLatLngDto,
+    val ne: GeoLatLngDto,
+)
+
+data class MapSessionUiModel(
+    val sessionId: String,
+    val boundsGcj02: GeoBoundsDto,
+    val orthoPreviewPath: String,
+    val maskOverlayPath: String? = null,
+    val showOrtho: Boolean = true,
+    val showMask: Boolean = true,
+    val maskAlpha: Float = 0.42f,
+    val isLoadingGeo: Boolean = false,
+    val geoError: String? = null,
 )
 
 data class InspectionRecordItem(
@@ -51,6 +74,11 @@ interface InspectionFacade {
     fun switchModel(modelKey: String)
     fun updateStatus(message: String)
     suspend fun infer(uri: Uri)
+    suspend fun loadGeoTiff(uri: Uri)
+    suspend fun inferMapSession()
+    fun setMapLayerVisibility(showOrtho: Boolean, showMask: Boolean)
+    fun setMaskAlpha(alpha: Float)
+    fun clearMapSession()
     suspend fun benchmark(uri: Uri, runs: Int = 10)
     fun refreshHistory()
     fun close()

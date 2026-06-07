@@ -536,6 +536,10 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/InspectionRecordItem"
+        mapSession:
+          nullable: true
+          allOf:
+            - $ref: "#/components/schemas/MapSessionUiModel"
 
     InspectionRecordItem:
       type: object
@@ -552,6 +556,82 @@ components:
         detail:
           type: string
           example: 占比 12.3%
+
+    GeoLatLng:
+      type: object
+      required: [lat, lng]
+      properties:
+        lat:
+          type: number
+          format: double
+        lng:
+          type: number
+          format: double
+
+    GeoBounds:
+      type: object
+      required: [sw, ne]
+      properties:
+        sw:
+          $ref: "#/components/schemas/GeoLatLng"
+        ne:
+          $ref: "#/components/schemas/GeoLatLng"
+
+    GeoMetadata:
+      type: object
+      description: GeoTIFF 地理元数据；WGS84 为真源，GCJ-02 仅用于高德地图展示。
+      properties:
+        crs:
+          type: string
+          example: EPSG:4326
+        source_width:
+          type: integer
+        source_height:
+          type: integer
+        preview_width:
+          type: integer
+        preview_height:
+          type: integer
+        model_input_width:
+          type: integer
+          example: 512
+        model_input_height:
+          type: integer
+          example: 512
+        bounds_wgs84:
+          $ref: "#/components/schemas/GeoBounds"
+        bounds_gcj02:
+          $ref: "#/components/schemas/GeoBounds"
+        ortho_preview_path:
+          type: string
+        mask_overlay_path:
+          type: string
+
+    MapSessionUiModel:
+      type: object
+      description: 地图页 UI 会话状态，由 `InspectionUiState.mapSession` 暴露。
+      properties:
+        sessionId:
+          type: string
+        boundsGcj02:
+          $ref: "#/components/schemas/GeoBounds"
+        orthoPreviewPath:
+          type: string
+        maskOverlayPath:
+          type: string
+          nullable: true
+        showOrtho:
+          type: boolean
+        showMask:
+          type: boolean
+        maskAlpha:
+          type: number
+          format: float
+        isLoadingGeo:
+          type: boolean
+        geoError:
+          type: string
+          nullable: true
 
     ModelChoice:
       type: object
@@ -609,6 +689,10 @@ components:
           type: object
           additionalProperties:
             type: integer
+        geo:
+          nullable: true
+          allOf:
+            - $ref: "#/components/schemas/GeoMetadata"
 
     AnalysisJob:
       type: object
@@ -968,6 +1052,26 @@ x-inProcessApi:
       summary: 登记影像并等待分析完成
       restEquivalent: POST /tasks/{taskId}/images + 轮询至 status=done
       kotlin: suspend fun infer(uri: Uri)
+    loadGeoTiff:
+      summary: 解析 GeoTIFF、生成 preview.png 与 geo.json sidecar
+      restEquivalent: null
+      kotlin: suspend fun loadGeoTiff(uri: Uri)
+    inferMapSession:
+      summary: 对当前 mapSession 的 preview.png 执行端侧分割推理
+      restEquivalent: null
+      kotlin: suspend fun inferMapSession()
+    setMapLayerVisibility:
+      summary: 切换正射图与 mask GroundOverlay 可见性
+      restEquivalent: null
+      kotlin: fun setMapLayerVisibility(showOrtho: Boolean, showMask: Boolean)
+    setMaskAlpha:
+      summary: 设置地图 mask 叠加透明度
+      restEquivalent: null
+      kotlin: fun setMaskAlpha(alpha: Float)
+    clearMapSession:
+      summary: 清除当前地图会话状态
+      restEquivalent: null
+      kotlin: fun clearMapSession()
     benchmark:
       summary: 当前图连跑 N 次测时延
       restEquivalent: null

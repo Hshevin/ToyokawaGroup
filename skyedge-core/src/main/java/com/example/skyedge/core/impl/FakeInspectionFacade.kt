@@ -1,9 +1,12 @@
 package com.example.skyedge.core.impl
 
 import android.net.Uri
+import com.example.skyedge.core.api.GeoBoundsDto
+import com.example.skyedge.core.api.GeoLatLngDto
 import com.example.skyedge.core.api.InspectionFacade
 import com.example.skyedge.core.api.InspectionRecordItem
 import com.example.skyedge.core.api.InspectionUiState
+import com.example.skyedge.core.api.MapSessionUiModel
 import com.example.skyedge.core.api.ModelChoice
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -52,6 +55,42 @@ class FakeInspectionFacade(
         )
     }
 
+    override suspend fun loadGeoTiff(uri: Uri) {
+        _state.value = _state.value.copy(
+            statusMessage = "GeoTIFF 已加载（Fake）\nuri: $uri",
+            mapSession = demoMapSession(maskOverlayPath = null),
+        )
+    }
+
+    override suspend fun inferMapSession() {
+        _state.value = _state.value.copy(
+            isInferring = false,
+            statusMessage = "地图检测完成（Fake）",
+            mapSession = (_state.value.mapSession ?: demoMapSession()).copy(
+                maskOverlayPath = "/data/analysis/demo/mask_overlay.png",
+            ),
+        )
+    }
+
+    override fun setMapLayerVisibility(showOrtho: Boolean, showMask: Boolean) {
+        _state.value = _state.value.copy(
+            mapSession = _state.value.mapSession?.copy(
+                showOrtho = showOrtho,
+                showMask = showMask,
+            ),
+        )
+    }
+
+    override fun setMaskAlpha(alpha: Float) {
+        _state.value = _state.value.copy(
+            mapSession = _state.value.mapSession?.copy(maskAlpha = alpha.coerceIn(0f, 1f)),
+        )
+    }
+
+    override fun clearMapSession() {
+        _state.value = _state.value.copy(mapSession = null, statusMessage = "地图会话已清除（Fake）")
+    }
+
     override suspend fun benchmark(uri: Uri, runs: Int) {
         _state.value = _state.value.copy(
             isInferring = false,
@@ -62,4 +101,15 @@ class FakeInspectionFacade(
     override fun refreshHistory() = Unit
 
     override fun close() = Unit
+
+    private fun demoMapSession(maskOverlayPath: String? = "/data/analysis/demo/mask_overlay.png"): MapSessionUiModel =
+        MapSessionUiModel(
+            sessionId = "fake-map-session",
+            boundsGcj02 = GeoBoundsDto(
+                sw = GeoLatLngDto(lat = 35.676, lng = 139.760),
+                ne = GeoLatLngDto(lat = 35.686, lng = 139.775),
+            ),
+            orthoPreviewPath = "/data/analysis/demo/preview.png",
+            maskOverlayPath = maskOverlayPath,
+        )
 }

@@ -10,12 +10,21 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
 import androidx.core.content.ContextCompat
 import com.example.skyedge.ui.inspection.InferenceViewModel
 import com.example.skyedge.ui.inspection.InspectionScreen
+import com.example.skyedge.ui.map.MapScreen
 
 class MainActivity : ComponentActivity() {
 
@@ -24,8 +33,13 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        if (!hasAmapApiKey()) {
+            viewModel.updateStatus("请在 local.properties 配置 AMAP_API_KEY 后使用地图")
+        }
 
         setContent {
+            var selectedTab by rememberSaveable { mutableStateOf(AppTab.MAP) }
+            val isAmapKeyConfigured = remember { hasAmapApiKey() }
             val galleryLauncher = rememberLauncherForActivityResult(
                 contract = ActivityResultContracts.GetContent(),
                 onResult = { uri: Uri? ->
@@ -45,28 +59,63 @@ class MainActivity : ComponentActivity() {
                 },
             )
 
-            InspectionScreen(
-                viewModel = viewModel,
-                selectedImageUri = selectedImageUri,
-                onPickImage = {
-                    if (needsReadImagesPermission() &&
-                        ContextCompat.checkSelfPermission(
-                            this@MainActivity,
-                            Manifest.permission.READ_MEDIA_IMAGES,
-                        ) != PackageManager.PERMISSION_GRANTED
-                    ) {
-                        permissionLauncher.launch(Manifest.permission.READ_MEDIA_IMAGES)
-                    } else {
-                        galleryLauncher.launch("image/*")
+            Scaffold(
+                bottomBar = {
+                    NavigationBar {
+                        AppTab.entries.forEach { tab ->
+                            NavigationBarItem(
+                                selected = selectedTab == tab,
+                                onClick = { selectedTab = tab },
+                                label = { Text(tab.label) },
+                                icon = {},
+                            )
+                        }
                     }
                 },
-                onBenchmark = {
-                    selectedImageUri?.let { viewModel.benchmarkCurrentImage(it, runs = 10) }
-                },
-            )
+            ) { innerPadding ->
+                when (selectedTab) {
+                    AppTab.MAP -> MapScreen(
+                        viewModel = viewModel,
+                        isAmapKeyConfigured = isAmapKeyConfigured,
+                        modifier = Modifier.padding(innerPadding),
+                    )
+                    AppTab.INSPECTION -> InspectionScreen(
+                        viewModel = viewModel,
+                        selectedImageUri = selectedImageUri,
+                        onPickImage = {
+                            if (needsReadImagesPermission() &&
+                                ContextCompat.checkSelfPermission(
+                                    this@MainActivity,
+                                    Manifest.permission.READ_MEDIA_IMAGES,
+                                ) != PackageManager.PERMISSION_GRANTED
+                            ) {
+                                permissionLauncher.launch(Manifest.permission.READ_MEDIA_IMAGES)
+                            } else {
+                                galleryLauncher.launch("image/*")
+                            }
+                        },
+                        onBenchmark = {
+                            selectedImageUri?.let { viewModel.benchmarkCurrentImage(it, runs = 10) }
+                        },
+                    )
+                }
+            }
         }
     }
 
     private fun needsReadImagesPermission(): Boolean =
         Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
+
+    private fun hasAmapApiKey(): Boolean {
+        val appInfo = packageManager.getApplicationInfo(
+            packageName,
+            PackageManager.GET_META_DATA,
+        )
+        return appInfo.metaData?.getString("com.amap.api.v2.apikey").orEmpty().isNotBlank()
+    }
+
+    private enum class AppTab(val label: String) {
+        MAP("地图"),
+        INSPECTION("检测"),
+    }
 }

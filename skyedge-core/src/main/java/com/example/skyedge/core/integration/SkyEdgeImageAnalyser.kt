@@ -3,6 +3,7 @@ package com.example.skyedge.core.integration
 import android.content.Context
 import android.net.Uri
 import com.example.skyedge.core.api.ModelChoice
+import com.example.skyedge.core.geo.GeoJsonIO
 import com.example.skyedge.core.model.ImagePreprocessor
 import com.example.skyedge.core.model.InferenceEngine
 import com.example.skyedge.core.domain.InspectionResult
@@ -120,6 +121,10 @@ class SkyEdgeImageAnalyser(
             root.put("inference_ms", inferenceMs)
             root.put("model_version", modelVersion)
             maskPath?.let { root.put("mask_path", it) }
+            val geoFile = GeoJsonIO.geoFile(File(localUrl.trimEnd(File.separatorChar)))
+            if (geoFile.exists()) {
+                runCatching { root.put("geo", JSONObject(geoFile.readText())) }
+            }
             return root.toString()
         }
 

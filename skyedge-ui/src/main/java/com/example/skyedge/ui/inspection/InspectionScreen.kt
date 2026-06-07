@@ -68,8 +68,8 @@ fun InspectionScreen(
         Spacer(modifier = Modifier.height(20.dp))
 
         val maskPath = uiState.lastMaskPath
-        val overlayBitmap = remember(maskPath) {
-            buildMaskOverlay(maskPath)
+        val overlayBitmap = remember(maskPath, uiState.selectedModelKey) {
+            buildMaskOverlay(maskPath, uiState.selectedModelKey)
         }
         if (selectedImageUri != null) {
             Row(

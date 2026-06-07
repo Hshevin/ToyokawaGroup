@@ -9,6 +9,7 @@ lifecycleRuntimeKtx = "2.6.1"
 activityCompose = "1.8.0"
 kotlin = "2.2.10"
 composeBom = "2026.02.01"
+amap3d = "10.1.200_loc6.4.9_sea9.7.4"
 pytorch_android = "2.1.0"
 pytorch_android_torchvision = "2.1.0"
 pytorch_android_torchvisionVersion = "2.0.0"
@@ -30,6 +31,7 @@ androidx-compose-ui-tooling-preview = { group = "androidx.compose.ui", name = "u
 androidx-compose-ui-test-manifest = { group = "androidx.compose.ui", name = "ui-test-manifest" }
 androidx-compose-ui-test-junit4 = { group = "androidx.compose.ui", name = "ui-test-junit4" }
 androidx-compose-material3 = { group = "androidx.compose.material3", name = "material3" }
+amap-map3d = { module = "com.amap.api:3dmap-location-search", version.ref = "amap3d" }
 pytorch_android = { module = "org.pytorch:pytorch_android", version.ref = "pytorch_android" }
 pytorch_android-v200 = { module = "org.pytorch:pytorch_android", version.ref = "pytorch_androidVersion" }
 pytorch_android_torchvision = { module = "org.pytorch:pytorch_android_torchvision", version.ref = "pytorch_android_torchvision" }

@@ -23,7 +23,9 @@ android {
 
 dependencies {
     implementation(project(":skyedge-core"))
+    implementation(libs.amap.map3d)
     implementation(platform(libs.androidx.compose.bom))
+    implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.compose.material3)
     implementation(libs.androidx.compose.ui)
     implementation(libs.androidx.compose.ui.graphics)

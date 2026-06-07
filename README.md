@@ -18,6 +18,8 @@
 - **PyTorch Mobile** 加载 TorchScript 模型，512×512 二值分割
 - **Building / Road** 双模型，App 内一键切换（无需改 JSON）
 - 原图与 **mask 叠加** 并排预览
+- **高德卫星底图 + GeoTIFF GroundOverlay**，支持端侧读取 WGS84 GeoTIFF 并转换为 GCJ-02 展示
+- GeoTIFF 推理后将 Building / Road mask 回映射到 preview 尺寸，并叠加到同一地理范围
 - 状态栏显示推理耗时、目标区域占比；无目标时提示「未识别到目标区域」
 - **连跑 10 次** benchmark（平均 / P90 时延）
 - **Room 本地库对接**：选图检测写入 `ImageRecordRepository`，mask 与 `summary_json` 落库
@@ -35,6 +37,24 @@
 | mask 路径 | `{local_url}/mask.png`（前缀 `filesDir/analysis/`），`summary_json.mask_path` 同步写入 |
 
 `AnalyseType.BUILDING / ROAD` 对应 building / road 模型；`img_url` 传相册 URI 字符串（`uri.toString()`）。
+
+---
+
+## 地图与 GeoTIFF
+
+地图页使用高德 Android 地图 SDK 的卫星底图，GeoTIFF 通过 SAF `OpenDocument` 导入并复制到本地分析目录。第一期支持 **未压缩 8-bit RGB/RGBA、EPSG:4326、ModelTiepoint + ModelPixelScale** 的轴对齐 GeoTIFF；暂不支持投影坐标系、16-bit、LZW/Deflate 压缩或带 `ModelTransformation` 旋转矩阵的影像。配置步骤与常见问题见 [`docs/MAP_GEO_SETUP.md`](docs/MAP_GEO_SETUP.md)。
+
+每个地图会话落盘在 `filesDir/analysis/<uuid>/`：
+
+```text
+source.tiff
+preview.png
+geo.json
+mask.png
+mask_overlay.png
+```
+
+`geo.json` 与 `summary_json.geo` 记录 WGS84 原始范围和 GCJ-02 展示范围；mask 从模型输出尺寸回映射到 `preview.png` 尺寸后作为 `GroundOverlay` 叠加。
 
 ---
 
@@ -60,10 +80,15 @@
 │       ├── InspectionScreen.kt
 │       ├── InferenceViewModel.kt
 │       └── MaskOverlay.kt
+│   └── src/main/java/.../ui/map/
+│       ├── AMapCompose.kt
+│       ├── MapScreen.kt
+│       └── MapOverlayManager.kt
 ├── skyedge-core/                      # 端侧核心：推理 + 编排 Facade
 │   ├── src/main/assets/               # models/、optimized/、*.pt
 │   └── src/main/java/.../core/
 │       ├── api/InspectionFacade.kt    # UI 契约
+│       ├── geo/                       # GeoTIFF、WGS84/GCJ-02、geo.json
 │       ├── impl/InspectionFacadeImpl.kt
 │       ├── integration/SkyEdgeImageAnalyser.kt
 │       ├── domain/InspectionResult.kt
@@ -104,11 +129,14 @@
 ### 运行 App
 
 1. 用 Android Studio 打开本仓库根目录
-2. 连接真机或模拟器，Run `app`
-3. 点击选图 → 选择 **Building** 或 **Road** → 查看叠加结果
-4. 可选：**当前图连跑 10 次** 查看时延统计
+2. 复制 `local.properties.example` 为 `local.properties`，填入本机 `sdk.dir` 与 `AMAP_API_KEY`
+3. 连接真机（推荐，地图/OpenGL 更稳定），Run `app`
+4. 地图页：点击 **导入 GeoTIFF** → 选择 Building/Road → **开始检测** → 查看卫星底图、正射图与 mask 叠加
+5. 检测页：点击选图 → 选择 **Building** 或 **Road** → 查看普通图片叠加结果
+6. 可选：**当前图连跑 10 次** 查看时延统计
 
 > 模型文件较大，首次安装 APK 体积约含 3 个 `.pt`（building 剪枝版 + 两路 baseline 中的 road；building baseline 仍保留在 `models/` 供对照）。
+> 高德瓦片需要网络；本项目仍不接入远程业务 API，推理与存储均在端侧完成。
 
 ### 构建与测试
 
@@ -159,15 +187,20 @@ Building 剪枝版（S2：0.08/0.15/0.25）相对 baseline：体积约 **-32%**�
 
 ```mermaid
 flowchart LR
-  UI[InspectionScreen] --> VM[InferenceViewModel]
+  Map[MapScreen] --> VM[InferenceViewModel]
+  UI[InspectionScreen] --> VM
   VM --> Facade[InspectionFacade]
+  Facade --> Geo[GeoTiffReader]
+  Geo --> Preview[preview.png + geo.json]
   Facade --> Repo[ImageRecordRepository]
   Repo --> Analyser[SkyEdgeImageAnalyser]
   Analyser --> Pre[ImagePreprocessor]
   Pre --> Engine[PytorchInferenceEngine]
   Engine --> Post[SegmentationPostProcessor]
   Post --> Mask[MaskWriter]
+  Mask --> Overlay[mask_overlay.png]
   Facade --> UI
+  Facade --> Map
 ```
 
 1. 按 `model_spec.json` 加载对应 `.pt`
