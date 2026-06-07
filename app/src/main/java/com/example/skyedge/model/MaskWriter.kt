@@ -5,10 +5,18 @@ import java.io.File
 import java.io.FileOutputStream
 
 object MaskWriter {
-    fun inspectionMaskFile(baseDir: File, localId: String): File {
-        val dir = File(baseDir, "${ModelSpec.INSPECTIONS_DIR}/$localId")
+    fun inspectionDir(baseDir: File, localId: String): File =
+        File(baseDir, "${ModelSpec.ANALYSIS_DIR}/$localId").apply { mkdirs() }
+
+    fun inspectionMaskFile(baseDir: File, localId: String): File =
+        maskFile(inspectionDir(baseDir, localId))
+
+    fun maskFile(outputDir: File): File = File(outputDir, "mask.png")
+
+    fun maskFileForLocalUrl(localUrl: String): File {
+        val dir = File(localUrl.trimEnd('/', '\\'))
         dir.mkdirs()
-        return File(dir, "mask.png")
+        return maskFile(dir)
     }
 
     fun writeClassIndices(

@@ -2,7 +2,7 @@ package com.example.skyedge.model
 
 object ModelSpec {
     const val LABELS_ASSET = "labels.txt"
-    const val INSPECTIONS_DIR = "inspections"
+    const val ANALYSIS_DIR = "analysis"
 
     const val INPUT_HEIGHT = 224
     const val INPUT_WIDTH = 224

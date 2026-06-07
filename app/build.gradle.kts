@@ -58,6 +58,7 @@ dependencies {
     implementation(libs.pytorch.android)
     implementation(libs.pytorch.android.torchvision)
     implementation("io.coil-kt:coil-compose:2.7.0")
+    implementation(project(":imgrecord"))
     testImplementation(libs.junit)
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)

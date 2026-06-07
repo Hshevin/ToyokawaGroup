@@ -6,6 +6,7 @@ import com.example.skyedge.domain.InspectionResult
 import org.pytorch.IValue
 import org.pytorch.Module
 import org.pytorch.Tensor
+import java.io.File
 
 class PytorchInferenceEngine(
     private val context: Context,
@@ -27,7 +28,10 @@ class PytorchInferenceEngine(
     override val loadedModelVersion: String?
         get() = loadedAssetName
 
-    override fun load(modelSpecAsset: String?): Result<Unit> = runCatching {
+    private val lock = Any()
+
+    override fun load(modelSpecAsset: String?): Result<Unit> = synchronized(lock) {
+        runCatching {
         module?.destroy()
         module = null
         loadedAssetName = null
@@ -36,20 +40,34 @@ class PytorchInferenceEngine(
         check(ModelLoader.assetExists(context, assetFile)) { "模型文件不存在: $assetFile" }
         module = Module.load(ModelLoader.assetFilePath(context, assetFile))
         loadedAssetName = assetFile
+        }
     }
 
-    override fun infer(bitmap: Bitmap): Result<InspectionResult> = runCatching {
-        postprocess(forward(bitmap), localId = null)
+    override fun infer(bitmap: Bitmap): Result<InspectionResult> = synchronized(lock) {
+        runCatching {
+        if (spec.taskType == TaskType.SEGMENTATION) {
+            InspectionResult.Error("分割任务请使用 infer(bitmap, localId) 或 infer(bitmap, outputDir)")
+        } else {
+            postprocess(forward(bitmap), context.cacheDir)
+        }
+        }
     }
 
-    override fun infer(bitmap: Bitmap, localId: String): Result<InspectionResult> = runCatching {
-        postprocess(forward(bitmap), localId)
+    override fun infer(bitmap: Bitmap, localId: String): Result<InspectionResult> =
+        infer(bitmap, MaskWriter.inspectionDir(context.filesDir, localId))
+
+    override fun infer(bitmap: Bitmap, outputDir: File): Result<InspectionResult> = synchronized(lock) {
+        runCatching {
+        postprocess(forward(bitmap), outputDir)
+        }
     }
 
     override fun close() {
+        synchronized(lock) {
         module?.destroy()
         module = null
         loadedAssetName = null
+        }
     }
 
     private fun forward(bitmap: Bitmap): Pair<Tensor, Long> {
@@ -61,16 +79,14 @@ class PytorchInferenceEngine(
         return outputTensor to elapsedMs
     }
 
-    private fun postprocess(outputTensor: Tensor, elapsedMs: Long, localId: String?): InspectionResult {
+    private fun postprocess(output: Pair<Tensor, Long>, outputDir: File): InspectionResult {
+        val (outputTensor, elapsedMs) = output
         val version = loadedAssetName ?: "unknown"
         return when (spec.taskType) {
             TaskType.SEGMENTATION -> {
-                if (localId == null) {
-                    return InspectionResult.Error("分割任务请使用 infer(bitmap, localId)")
-                }
                 val parsed = SegmentationPostProcessor.fromOutputTensor(outputTensor, spec)
                     .getOrElse { throw it }
-                val maskFile = MaskWriter.inspectionMaskFile(context.filesDir, localId)
+                val maskFile = MaskWriter.maskFile(outputDir)
                 MaskWriter.writeClassIndices(
                     parsed.classIndices,
                     parsed.width,
