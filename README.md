@@ -17,6 +17,21 @@
 - 原图与 **mask 叠加** 并排预览
 - 状态栏显示推理耗时、目标区域占比；无目标时提示「未识别到目标区域」
 - **连跑 10 次** benchmark（平均 / P90 时延）
+- **Room 本地库对接**：选图检测写入 `ImageRecordRepository`，mask 与 `summary_json` 落库
+
+---
+
+## 本地数据库对接（ImageRecord）
+
+依赖同学组件：[ToyokawaGroup-DatabaseComponent](https://github.com/Hshevin/ToyokawaGroup-DatabaseComponent)（本仓库 `imgrecord/` 模块）。
+
+| 端侧实现 | 说明 |
+|----------|------|
+| `SkyEdgeImageAnalyser` | 实现 `ImageAnalyser.analyse(localUrl, imgUrl, analyseType)` |
+| `InferenceViewModel.infer(uri)` | `insert` → 后台推理 → 轮询 `done` → UI 展示 |
+| mask 路径 | `{local_url}/mask.png`（前缀 `filesDir/analysis/`），`summary_json.mask_path` 同步写入 |
+
+`AnalyseType.BUILDING / ROAD` 对应 building / road 模型；`img_url` 传相册 URI 字符串（`uri.toString()`）。
 
 ---
 
@@ -37,13 +52,15 @@
 
 ```text
 android/
+├── imgrecord/                         # DatabaseComponent（Room + Repository）
 ├── app/src/main/
 │   ├── assets/
 │   │   ├── models/                    # 算法交付 + model_spec.json
 │   │   └── optimized/                 # 端侧优化产物（building 剪枝版）
 │   └── java/com/example/skyedge/
 │       ├── MainActivity.kt            # Compose UI、选图、模型切换
-│       ├── InferenceViewModel.kt      # 推理状态与 benchmark
+│       ├── InferenceViewModel.kt      # insert + 轮询 + 历史记录
+│       ├── integration/SkyEdgeImageAnalyser.kt
 │       ├── domain/InspectionResult.kt
 │       └── model/                     # 推理引擎与前后处理
 │           ├── PytorchInferenceEngine.kt

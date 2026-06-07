@@ -24,5 +24,5 @@ dependencyResolutionManagement {
 
 rootProject.name = "SkyEdge"
 include(":app")
-include(":app")
+include(":imgrecord")
  
