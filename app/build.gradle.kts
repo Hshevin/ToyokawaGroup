@@ -32,6 +32,11 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         manifestPlaceholders["AMAP_API_KEY"] = amapApiKey
+
+        // PyTorch + 高德 native 库体积大；仅保留真机 arm64 与模拟器 x86_64，避免 packageDebug OOM
+        ndk {
+            abiFilters += listOf("arm64-v8a", "x86_64")
+        }
     }
     signingConfigs {
         if (keystorePropertiesFile.exists()) {

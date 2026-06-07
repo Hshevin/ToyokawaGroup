@@ -13,7 +13,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
-class InferenceViewModel(
+class InferenceViewModel @JvmOverloads constructor(
     application: Application,
     injectedFacade: InspectionFacade? = null,
 ) : AndroidViewModel(application) {
