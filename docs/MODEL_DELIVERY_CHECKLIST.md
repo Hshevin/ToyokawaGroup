@@ -30,7 +30,7 @@ skyedge_models_delivery/
     └── ...
 ```
 
-端侧放入工程：`app/src/main/assets/models/<name>/*.pt`，每个模型一份 `model_spec.json`（见下文）。
+端侧放入工程：`skyedge-core/src/main/assets/models/<name>/*.pt`，每个模型一份 `model_spec.json`（见下文）。
 
 ---
 
@@ -255,7 +255,7 @@ A：**推荐共用 `shared_acceptance`**；若某模型预处理不同，交同�
 
 ## 十一、端侧收到后（给你参考）
 
-1. 拷贝至 `app/src/main/assets/models/<model_id>/`  
+1. 拷贝至 `skyedge-core/src/main/assets/models/<model_id>/`  
 2. 在 App 内切换 Building / Road 模型，用同一张图对比效果  
 3. `python tools/verify_mask.py` 逐模型验收 mask  
 

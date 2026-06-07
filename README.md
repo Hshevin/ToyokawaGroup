@@ -5,8 +5,11 @@
 | 模块 | 负责人 | 本仓库范围 |
 |------|--------|------------|
 | 算法训练与导出 |  | 交付 `torchscript.pt`、`model_spec.json`、`best_model.pth` |
-| **端侧部署（本部分）** | **端侧** | App 推理链路、模型优化、验收与文档 |
-| UI / 本地数据 |  | 不在本 README 详述 |
+| **端侧部署（本部分）** | **端侧** | `skyedge-core` 推理链路、模型优化、验收与文档 |
+| **UI** | **前端** | `skyedge-ui` Compose 界面 |
+| 本地数据 |  | `imgrecord` Room 组件 |
+
+架构细节见 [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)；接口契约见 [`openapi/api.yaml`](openapi/api.yaml)。
 
 ---
 
@@ -28,7 +31,7 @@
 | 端侧实现 | 说明 |
 |----------|------|
 | `SkyEdgeImageAnalyser` | 实现 `ImageAnalyser.analyse(localUrl, imgUrl, analyseType)` |
-| `InferenceViewModel.infer(uri)` | `insert` → 后台推理 → 轮询 `done` → UI 展示 |
+| `InspectionFacade.infer(uri)` | `insert` → 后台推理 → 轮询 `done` → UI 展示 |
 | mask 路径 | `{local_url}/mask.png`（前缀 `filesDir/analysis/`），`summary_json.mask_path` 同步写入 |
 
 `AnalyseType.BUILDING / ROAD` 对应 building / road 模型；`img_url` 传相册 URI 字符串（`uri.toString()`）。
@@ -42,7 +45,7 @@
 | Building | `assets/optimized/building_unet_efficientnetb0_v1_pruned_ft_s2.pt` | 结构化剪枝 + 300 step 微调，**已通过门禁** |
 | Road | `assets/models/road_unet_efficientnetb0_v1/road_unet_efficientnetb0_v1_torchscript.pt` | 算法 baseline，剪枝实验未通过，保持原模型 |
 
-配置入口：各模型目录下的 `model_spec.json`（`asset_file` 字段指向实际 `.pt`）。
+配置入口：各模型目录下的 `model_spec.json`（`asset_file` 字段指向实际 `.pt`）。资产位于 `skyedge-core/src/main/assets/`。
 
 预处理与后处理约定见 `skyedge_vm_test_images/README.md`（512×512、ImageNet mean/std、sigmoid + threshold）。
 
@@ -51,30 +54,43 @@
 ## 目录结构
 
 ```text
-android/
-├── imgrecord/                         # DatabaseComponent（Room + Repository）
-├── app/src/main/
-│   ├── assets/
-│   │   ├── models/                    # 算法交付 + model_spec.json
-│   │   └── optimized/                 # 端侧优化产物（building 剪枝版）
-│   └── java/com/example/skyedge/
-│       ├── MainActivity.kt            # Compose UI、选图、模型切换
-│       ├── InferenceViewModel.kt      # insert + 轮询 + 历史记录
+├── app/                               # 应用壳：MainActivity、Manifest
+├── skyedge-ui/                        # 前端：Compose UI + 薄 ViewModel
+│   └── src/main/java/.../ui/inspection/
+│       ├── InspectionScreen.kt
+│       ├── InferenceViewModel.kt
+│       └── MaskOverlay.kt
+├── skyedge-core/                      # 端侧核心：推理 + 编排 Facade
+│   ├── src/main/assets/               # models/、optimized/、*.pt
+│   └── src/main/java/.../core/
+│       ├── api/InspectionFacade.kt    # UI 契约
+│       ├── impl/InspectionFacadeImpl.kt
 │       ├── integration/SkyEdgeImageAnalyser.kt
 │       ├── domain/InspectionResult.kt
-│       └── model/                     # 推理引擎与前后处理
-│           ├── PytorchInferenceEngine.kt
-│           ├── ModelLoader.kt / ModelSpecLoader.kt
-│           ├── ImagePreprocessor.kt
-│           ├── SegmentationPostProcessor.kt
-│           └── MaskWriter.kt
+│       └── model/                     # PytorchInferenceEngine 等
+├── imgrecord/                         # DatabaseComponent（Room + Repository）
+├── openapi/api.yaml                   # JSON / Facade 字段契约
 ├── docs/
-│   ├── MODEL_DELIVERY_CHECKLIST.md    # 算法 → 端侧 交付清单
-│   └── MODEL_OPTIMIZATION_DELIVERY_REPORT.md  # 剪枝/量化实验结论
+│   ├── ARCHITECTURE.md                # 模块与依赖说明
+│   ├── MODEL_DELIVERY_CHECKLIST.md
+│   └── MODEL_OPTIMIZATION_DELIVERY_REPORT.md
 ├── tools/                             # 优化与验收脚本（Python）
-├── skyedge_vm_test_images/            # VM/本机测试图（不进 APK）
-└── README.md                          # 本文件
+├── skyedge_vm_test_images/
+└── README.md
 ```
+
+---
+
+## 协同开发
+
+| 模块 | 典型工作 | 单测 / 预览 |
+|------|----------|-------------|
+| `skyedge-ui` | 界面、交互、主题 | `FakeInspectionFacade` 无需 PyTorch |
+| `skyedge-core` | 推理、Facade、模型接入 | `skyedge-core/src/test` |
+| `imgrecord` | Room、Repository | `imgrecord/src/test` |
+| `app` | 集成、权限、打包 | `assembleDebug` |
+
+依赖方向：`app` → `skyedge-ui` → `skyedge-core` → `imgrecord`（禁止反向）。
 
 ---
 
@@ -83,7 +99,7 @@ android/
 ### 环境
 
 - Android Studio（推荐），`minSdk 24`，Kotlin + Jetpack Compose
-- 依赖：`org.pytorch:pytorch_android`（见 `app/build.gradle.kts`）
+- PyTorch Mobile 依赖见 `skyedge-core/build.gradle.kts`
 
 ### 运行 App
 
@@ -93,6 +109,12 @@ android/
 4. 可选：**当前图连跑 10 次** 查看时延统计
 
 > 模型文件较大，首次安装 APK 体积约含 3 个 `.pt`（building 剪枝版 + 两路 baseline 中的 road；building baseline 仍保留在 `models/` 供对照）。
+
+### 构建与测试
+
+```bash
+./gradlew :skyedge-core:test :app:assembleDebug
+```
 
 ### Python 工具（可选）
 
@@ -129,7 +151,7 @@ Building 剪枝版（S2：0.08/0.15/0.25）相对 baseline：体积约 **-32%**�
 
 - 交付要求：[`docs/MODEL_DELIVERY_CHECKLIST.md`](docs/MODEL_DELIVERY_CHECKLIST.md)
 - 每模型需提供：`model_spec.json`、`*_torchscript.pt`、（可选）`best_model.pth` 与 metrics
-- 端侧负责：接入 App、剪枝/量化实验、mask 验收、是否替换 baseline 的结论
+- 端侧负责：接入 `skyedge-core`、剪枝/量化实验、mask 验收、是否替换 baseline 的结论
 
 ---
 
@@ -137,12 +159,15 @@ Building 剪枝版（S2：0.08/0.15/0.25）相对 baseline：体积约 **-32%**�
 
 ```mermaid
 flowchart LR
-  A[选图 URI] --> B[ImagePreprocessor]
-  B --> C[PytorchInferenceEngine]
-  C --> D[SegmentationPostProcessor]
-  D --> E[MaskWriter 叠加 PNG]
-  E --> F[UI 预览]
-  M[model_spec.json] --> C
+  UI[InspectionScreen] --> VM[InferenceViewModel]
+  VM --> Facade[InspectionFacade]
+  Facade --> Repo[ImageRecordRepository]
+  Repo --> Analyser[SkyEdgeImageAnalyser]
+  Analyser --> Pre[ImagePreprocessor]
+  Pre --> Engine[PytorchInferenceEngine]
+  Engine --> Post[SegmentationPostProcessor]
+  Post --> Mask[MaskWriter]
+  Facade --> UI
 ```
 
 1. 按 `model_spec.json` 加载对应 `.pt`
@@ -158,7 +183,7 @@ flowchart LR
 若画面以农田/绿地为主、无明显道路，模型输出空 mask 属预期。请用 `skyedge_vm_test_images/road/images/` 中的测试图验证；状态栏会显示「未识别到目标区域」。
 
 **如何换模型？**  
-修改对应 `model_spec.json` 的 `asset_file`，或通过 App 内 Building/Road 按钮切换（已绑定 spec 路径）。
+修改 `skyedge-core/src/main/assets/` 下对应 `model_spec.json` 的 `asset_file`，或通过 App 内 Building/Road 按钮切换（已绑定 spec 路径）。
 
 ---
 
