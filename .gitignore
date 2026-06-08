@@ -20,6 +20,13 @@ keystore/
 *.keystore
 .cursor
 
+# Release signing (local only — never commit passwords or .jks)
+/keystore/*.jks
+/keystore/keystore.properties
+
+# FP8 tune intermediates
+/tools/out/
+
 # Python
 __pycache__/
 *.pyc

@@ -18,6 +18,7 @@ import com.example.skyedge.core.integration.SkyEdgeImageAnalyser
 import com.example.skyedge.core.model.ImagePreprocessor
 import com.example.skyedge.core.model.InferenceEngine
 import com.example.skyedge.core.model.MaskOverlayRenderer
+import com.example.skyedge.core.model.ModelLoader
 import com.example.skyedge.core.model.ModelSpec
 import com.example.skyedge.core.model.PytorchInferenceEngine
 import imgrecord.ImageRecordRepository
@@ -58,6 +59,7 @@ class InspectionFacadeImpl(
     override val modelChoices: List<ModelChoice> = ModelChoice.ALL
 
     init {
+        ModelLoader.clearModelCache(context.filesDir)
         loadModel()
         refreshHistory()
     }

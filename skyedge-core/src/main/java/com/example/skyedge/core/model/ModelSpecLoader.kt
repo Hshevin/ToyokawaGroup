@@ -11,6 +11,7 @@ enum class TaskType {
 data class LoadedModelSpec(
     val modelId: String,
     val assetFile: String?,
+    val quantizationRuntimeAsset: String?,
     val taskType: TaskType,
     val inputHeight: Int,
     val inputWidth: Int,
@@ -55,6 +56,9 @@ object ModelSpecLoader {
         return LoadedModelSpec(
             modelId = json.getString("model_id"),
             assetFile = json.optString("asset_file").takeIf { it.isNotEmpty() },
+            quantizationRuntimeAsset = json.optJSONObject("quantization")
+                ?.optString("runtime_asset")
+                ?.takeIf { it.isNotEmpty() },
             taskType = task,
             inputHeight = input.getInt("height"),
             inputWidth = input.getInt("width"),
@@ -78,6 +82,7 @@ object ModelSpecLoader {
     fun defaultSpec(): LoadedModelSpec = LoadedModelSpec(
         modelId = "placeholder_classification",
         assetFile = null,
+        quantizationRuntimeAsset = null,
         taskType = TaskType.CLASSIFICATION,
         inputHeight = ModelSpec.INPUT_HEIGHT,
         inputWidth = ModelSpec.INPUT_WIDTH,

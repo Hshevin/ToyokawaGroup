@@ -62,8 +62,8 @@ mask_overlay.png
 
 | 任务 | 加载文件 | 说明 |
 |------|----------|------|
-| Building | `assets/optimized/building_unet_efficientnetb0_v1_pruned_ft_s2.pt` | 结构化剪枝 + 300 step 微调，**已通过门禁** |
-| Road | `assets/models/road_unet_efficientnetb0_v1/road_unet_efficientnetb0_v1_torchscript.pt` | 算法 baseline，剪枝实验未通过，保持原模型 |
+| Building | `optimized/building_unet_efficientnetb0_v1_pruned_fp8.fp8pkg` | **剪枝 S2 + FP8**，pack **2.38MB**，runtime **~15MB** |
+| Road | `optimized/road_unet_efficientnetb0_v1_fp8.fp8pkg` | FP8 量化（road 剪枝未通过，仅量化） |
 
 配置入口：各模型目录下的 `model_spec.json`（`asset_file` 字段指向实际 `.pt`）。资产位于 `skyedge-core/src/main/assets/`。
 
@@ -128,15 +128,18 @@ mask_overlay.png
 
 ### 运行 App
 
-1. 用 Android Studio 打开本仓库根目录
-2. 复制 `local.properties.example` 为 `local.properties`，填入本机 `sdk.dir` 与 `AMAP_API_KEY`
-3. 连接真机（推荐，地图/OpenGL 更稳定），Run `app`
-4. 地图页：点击 **导入 GeoTIFF** → 选择 Building/Road → **开始检测** → 查看卫星底图、正射图与 mask 叠加
-5. 检测页：点击选图 → 选择 **Building** 或 **Road** → 查看普通图片叠加结果
-6. 可选：**当前图连跑 10 次** 查看时延统计
+1. 若缺少 `imgrecord/` 目录，先拉取数据库组件：
+   ```bash
+   git clone https://github.com/Hshevin/ToyokawaGroup-DatabaseComponent.git imgrecord
+   ```
+2. 用 Android Studio 打开本仓库根目录
+3. 复制 `local.properties.example` 为 `local.properties`，填入本机 `sdk.dir` 与 `AMAP_API_KEY`
+4. 连接真机（推荐，地图/OpenGL 更稳定）或模拟器，Run `app`
+5. 地图页：点击 **导入 GeoTIFF** → 选择 Building/Road → **开始检测** → 查看卫星底图、正射图与 mask 叠加
+6. 检测页：点击选图 → 选择 **Building** 或 **Road** → 查看普通图片叠加结果
+7. 可选：**当前图连跑 10 次** 查看时延统计
 
-> 模型文件较大，首次安装 APK 体积约含 3 个 `.pt`（building 剪枝版 + 两路 baseline 中的 road；building baseline 仍保留在 `models/` 供对照）。
-> 高德瓦片需要网络；本项目仍不接入远程业务 API，推理与存储均在端侧完成。
+> 当前 App 使用 FP8 打包模型（building 剪枝 + FP8 / road FP8）。高德瓦片需要网络；推理与存储均在端侧完成。
 
 ### 构建与测试
 
@@ -155,9 +158,24 @@ pip install -r tools/requirements-optimize.txt
 | `tools/benchmark_torchscript_models.py` | 对比各 `.pt` 体积与 CPU 时延 |
 | `tools/structured_prune_unet_smp.py` | 结构化剪枝（channel L1） |
 | `tools/prune_finetune_unet_smp.py` | 剪枝 + 快速微调并导出 `.pt` |
+| `tools/quantize_fp8_unet.py` | FP8 量化 + 导出 `.fp8pkg` / runtime `.pt` |
+| `tools/tune_fp8_unet.py` | FP8 网格调参（格式/粒度/跳层） |
+| `tools/fp8_quant_utils.py` | FP8 打包与反量化工具 |
 | `tools/verify_mask.py` | 端侧 mask 与参考 mask 数值/视觉验收 |
 
-测试数据目录：`skyedge_vm_test_images/`（building/road 各 10 对 image+mask）。
+FP8 示例（剪枝权重需加 `--prune`）：
+
+```bash
+py -3 tools/quantize_fp8_unet.py --prune \
+  --checkpoint app/src/main/assets/optimized/building_unet_efficientnetb0_v1_pruned_ft_s2.pth \
+  --model-spec app/src/main/assets/models/building_unet_efficientnetb0_v1/model_spec.json \
+  --images-dir skyedge_vm_test_images/building/images \
+  --masks-dir skyedge_vm_test_images/building/masks \
+  --baseline-torchscript app/src/main/assets/optimized/building_unet_efficientnetb0_v1_pruned_fp8_runtime.pt \
+  --output-torchscript app/src/main/assets/optimized/building_unet_efficientnetb0_v1_pruned_fp8.pt
+```
+
+调参输出到 `tools/out/fp8_tune/`（勿再写入 `assets/optimized/`，避免 APK 膨胀）；选定配置后复制 `best.fp8pkg` / `best_runtime.pt` 到 `assets/optimized/` 并重命名。
 
 ---
 
@@ -169,7 +187,8 @@ pip install -r tools/requirements-optimize.txt
 |------|----------|------|
 | Baseline TorchScript | 参考基线 | **当前使用** |
 | Dynamic INT8 | 无体积/时延收益 | 无收益 |
-| 剪枝 S2 + 微调 | **通过门禁，已接入 App** | IoU 塌陷，不接入 |
+| **FP8 pack（调参后）** | pack **3.79MB**，IoU 掉 0.46% | pack **3.79MB**，IoU 升 0.77% |
+| 剪枝 S2 + 微调 | 时延/体积更优，见 optimized 目录 | 未通过 |
 
 Building 剪枝版（S2：0.08/0.15/0.25）相对 baseline：体积约 **-32%**，时延约 **-28%**，IoU 掉点 **< 1.5%** 门禁。
 

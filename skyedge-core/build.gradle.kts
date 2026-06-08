@@ -11,7 +11,7 @@ android {
     }
 
     androidResources {
-        noCompress += listOf("pt", "onnx", "tflite")
+        noCompress += listOf("pt", "onnx", "tflite", "fp8pkg")
     }
 
     compileOptions {
@@ -20,7 +20,9 @@ android {
     }
 
     testOptions {
-        unitTests.isIncludeAndroidResources = true
+        unitTests {
+            isIncludeAndroidResources = true
+        }
     }
 }
 

@@ -1,17 +1,5 @@
 #!/usr/bin/env python3
-"""
-Structured pruning experiment for SMP UNet(EfficientNet-B0) checkpoints.
-
-What this script does:
-1) Rebuilds SMP UNet architecture
-2) Loads `best_model.pth` state_dict
-3) Applies channel-structured pruning with torch_pruning
-4) Exports TorchScript and prints size/latency comparison
-
-Note:
-- This script does NOT include fine-tuning. It is a fast feasibility experiment.
-- For production, run fine-tune and evaluate IoU/F1 before replacing baseline.
-"""
+"""Structured channel pruning for SMP UNet checkpoints."""
 
 from __future__ import annotations
 
@@ -48,7 +36,6 @@ def benchmark(model: torch.nn.Module, height: int, width: int, warmup: int, iter
 
 
 def build_model() -> nn.Module:
-    # Matches key pattern: encoder._blocks.*, decoder.*, segmentation_head.*
     return Unet(
         encoder_name="efficientnet-b0",
         encoder_weights=None,
@@ -70,7 +57,6 @@ def load_checkpoint(model: nn.Module, ckpt: Path) -> None:
 
 
 def group_ratio_by_module(name: str, shallow: float, mid: float, deep: float) -> float:
-    # Encoder blocks are indexed in EfficientNet-B0 as _blocks.0..15
     if name.startswith("encoder._blocks."):
         try:
             block_idx = int(name.split(".")[2])
@@ -81,10 +67,8 @@ def group_ratio_by_module(name: str, shallow: float, mid: float, deep: float) ->
         if block_idx <= 10:
             return mid
         return deep
-    # Decoder/bottleneck: use deep ratio
     if name.startswith("decoder.") or name.startswith("segmentation_head."):
         return deep
-    # Default conservative
     return shallow
 
 
@@ -96,12 +80,10 @@ def build_pruning_ratio_dict(model: nn.Module, shallow: float, mid: float, deep:
         if not isinstance(module, nn.Conv2d):
             continue
 
-        # Keep stem + head untouched
         if name.startswith("encoder._conv_stem") or name.startswith("encoder._conv_head"):
             ignored.append(module)
             continue
 
-        # Keep segmentation head untouched for stability (per your rule)
         if name.startswith("segmentation_head"):
             ignored.append(module)
             continue
@@ -164,7 +146,6 @@ def main() -> None:
     pruned_avg, pruned_p90 = benchmark(model, h, w, args.warmup, args.iterations)
     export_torchscript(model, args.out, h, w)
 
-    # Estimate baseline size from checkpoint only for rough comparison.
     base_size = file_size_mb(args.checkpoint)
     out_size = file_size_mb(args.out)
 

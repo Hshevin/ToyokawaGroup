@@ -63,7 +63,7 @@ def run_one(spec_path: Path, warmup: int, iterations: int) -> BenchRow:
     h = int(spec["input"]["height"])
     w = int(spec["input"]["width"])
 
-    # Resolve "models/xxx.pt" relative to skyedge-core/src/main/assets/
+    # Resolve asset paths relative to skyedge-core/src/main/assets/
     assets_root = spec_path.parent.parent.parent
     model_path = assets_root / asset_rel
     if not model_path.exists():

@@ -11,10 +11,29 @@ object ModelLoader {
             true
         }.getOrDefault(false)
 
-    fun assetFilePath(context: Context, assetName: String): String {
+    fun resolveModelAsset(context: Context, assetName: String, cacheToken: String): String {
+        if (assetName.endsWith(".fp8pkg")) {
+            val runtimeAsset = assetName.removeSuffix(".fp8pkg") + "_runtime.pt"
+            check(assetExists(context, runtimeAsset)) {
+                "FP8 包 $assetName 需要配套运行时模型 $runtimeAsset"
+            }
+            return assetFilePath(context, runtimeAsset, cacheToken)
+        }
+        return assetFilePath(context, assetName, cacheToken)
+    }
+
+    fun assetFilePath(context: Context, assetName: String, cacheToken: String = assetName): String {
         val file = File(context.filesDir, assetName)
-        if (file.exists() && file.length() > 0) {
+        val marker = cacheMarkerFile(context.filesDir, assetName)
+        val cacheHit = file.exists() &&
+            file.length() > 0 &&
+            marker.exists() &&
+            marker.readText() == cacheToken
+        if (cacheHit) {
             return file.absolutePath
+        }
+        if (file.exists()) {
+            file.delete()
         }
         file.parentFile?.mkdirs()
         context.assets.open(assetName).use { input ->
@@ -27,6 +46,23 @@ object ModelLoader {
                 output.flush()
             }
         }
+        marker.parentFile?.mkdirs()
+        marker.writeText(cacheToken)
         return file.absolutePath
     }
+
+    fun clearModelCache(filesDir: File) {
+        filesDir.listFiles()?.forEach { entry ->
+            if (entry.isFile && entry.name.endsWith(".cache_token")) {
+                entry.delete()
+            }
+        }
+        val optimized = File(filesDir, "optimized")
+        if (optimized.exists()) {
+            optimized.deleteRecursively()
+        }
+    }
+
+    private fun cacheMarkerFile(filesDir: File, assetName: String): File =
+        File(filesDir, assetName.replace('/', '_') + ".cache_token")
 }
