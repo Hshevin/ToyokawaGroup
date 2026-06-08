@@ -1,0 +1,1084 @@
+openapi: 3.1.0
+info:
+  title: 低空巡检核查 API
+  description: |
+    ToyokawaGroup / SkyEdge 低空巡检与应急核查 REST 契约（契约先行 v0.1）。
+
+    **与端侧现有模型对齐**
+    - `AnalysisJob` 字段映射 Android `imgrecord.ImageRecord`（`local_url` ↔ `storagePath`）
+    - `summary` 对齐端侧 `summary_json`（分割任务含 `defect_area_ratio`、`mask_path` 等）
+    - `analyseType`：`building` / `road` 对应 `AnalyseType.BUILDING` / `ROAD`
+
+    **端侧模块契约（进程内，非 HTTP）**
+    - UI 模块 `skyedge-ui` 通过 `InspectionFacade`（`skyedge-core`）调用推理与 Room，不直连 PyTorch
+    - `InspectionUiState` / `InspectionRecordItem` / `ModelChoice` 见 `components/schemas`
+    - 进程内 API 映射见文末 `x-inProcessApi`（当前仅 Android 端实现，不等同于部署 REST 服务）
+
+    **模块路径**
+    - `com.example.skyedge.core.api.InspectionFacade`
+    - `com.example.skyedge.core.api.InspectionUiState`
+    - `com.example.skyedge.ui.inspection.InspectionScreen`
+
+    **版本说明**
+    - v0.1：任务、影像登记、分析作业、图层查看
+    - v0.2（已定义 schema，实现可延后）：异常核查、报告生成
+  version: 0.1.0
+  contact:
+    name: ToyokawaGroup
+
+servers:
+  - url: http://localhost:4010
+    description: 本地 Mock Server（Prism / Apifox）
+  - url: https://api.example.com/v1
+    description: 生产环境（占位）
+
+tags:
+  - name: tasks
+    description: 巡检任务
+  - name: images
+    description: 任务影像与分析作业
+  - name: layers
+    description: 影像图层（原图 / mask / 变化）
+  - name: anomalies
+    description: 疑似异常与人工核查（v0.2）
+  - name: reports
+    description: 报告生成与导出（v0.2）
+  - name: facade
+    description: 端侧进程内 API（InspectionFacade，见 x-inProcessApi）
+
+paths:
+  /tasks:
+    get:
+      tags: [tasks]
+      operationId: listTasks
+      summary: 任务列表
+      parameters:
+        - $ref: "#/components/parameters/StatusQuery"
+        - $ref: "#/components/parameters/KeywordQuery"
+        - $ref: "#/components/parameters/PageQuery"
+        - $ref: "#/components/parameters/PageSizeQuery"
+      responses:
+        "200":
+          description: 成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ApiResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/Task"
+              examples:
+                default:
+                  $ref: "#/components/examples/TaskListResponse"
+    post:
+      tags: [tasks]
+      operationId: createTask
+      summary: 新建任务
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateTaskRequest"
+            examples:
+              default:
+                $ref: "#/components/examples/CreateTaskRequest"
+      responses:
+        "201":
+          description: 创建成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ApiResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/Task"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+  /tasks/{taskId}:
+    get:
+      tags: [tasks]
+      operationId: getTask
+      summary: 任务详情
+      parameters:
+        - $ref: "#/components/parameters/TaskIdPath"
+      responses:
+        "200":
+          description: 成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ApiResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/Task"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /tasks/{taskId}/images:
+    get:
+      tags: [images]
+      operationId: listTaskImages
+      summary: 任务下影像列表
+      parameters:
+        - $ref: "#/components/parameters/TaskIdPath"
+        - name: analyseStatus
+          in: query
+          description: 按分析状态筛选
+          schema:
+            $ref: "#/components/schemas/AnalyseStatus"
+      responses:
+        "200":
+          description: 成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ApiResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/TaskImage"
+    post:
+      tags: [images]
+      operationId: registerTaskImage
+      summary: 登记影像并创建分析作业
+      description: |
+        登记一张影像并触发分析。客户端可传 `imgUrl`（相册/云端 URI 字符串），
+        或通过 `multipart/form-data` 上传文件。与端侧 `ImageRecordRepository.insert` 语义一致。
+      parameters:
+        - $ref: "#/components/parameters/TaskIdPath"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterImageRequest"
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file, analyseType]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                analyseType:
+                  $ref: "#/components/schemas/AnalyseType"
+                imgUrl:
+                  type: string
+                  description: 可选，客户端原始 URI，落库为 img_url
+      responses:
+        "202":
+          description: 已接受，分析作业进入 pending
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ApiResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/AnalysisJob"
+              examples:
+                default:
+                  $ref: "#/components/examples/AnalysisJobAccepted"
+
+  /tasks/{taskId}/images/{imageId}:
+    get:
+      tags: [images]
+      operationId: getTaskImage
+      summary: 单条影像与分析结果
+      parameters:
+        - $ref: "#/components/parameters/TaskIdPath"
+        - $ref: "#/components/parameters/ImageIdPath"
+      responses:
+        "200":
+          description: 成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ApiResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/TaskImage"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /tasks/{taskId}/images/{imageId}/layers:
+    get:
+      tags: [layers]
+      operationId: getImageLayers
+      summary: 影像图层（原图 / mask / 变化 / 标注）
+      description: 供前端「影像查看」页与原图 mask 叠加展示。
+      parameters:
+        - $ref: "#/components/parameters/TaskIdPath"
+        - $ref: "#/components/parameters/ImageIdPath"
+      responses:
+        "200":
+          description: 成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ApiResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/LayerBundle"
+              examples:
+                default:
+                  $ref: "#/components/examples/LayerBundle"
+
+  /tasks/{taskId}/anomalies:
+    get:
+      tags: [anomalies]
+      operationId: listAnomalies
+      summary: 疑似异常列表（v0.2）
+      parameters:
+        - $ref: "#/components/parameters/TaskIdPath"
+        - name: severity
+          in: query
+          schema:
+            $ref: "#/components/schemas/Severity"
+        - name: reviewStatus
+          in: query
+          schema:
+            $ref: "#/components/schemas/ReviewStatus"
+      responses:
+        "200":
+          description: 成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ApiResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/Anomaly"
+
+  /tasks/{taskId}/anomalies/{anomalyId}/review:
+    put:
+      tags: [anomalies]
+      operationId: reviewAnomaly
+      summary: 人工核查异常（v0.2）
+      parameters:
+        - $ref: "#/components/parameters/TaskIdPath"
+        - $ref: "#/components/parameters/AnomalyIdPath"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReviewAnomalyRequest"
+      responses:
+        "200":
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ApiResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/Anomaly"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /tasks/{taskId}/reports:
+    post:
+      tags: [reports]
+      operationId: createReport
+      summary: 生成报告（v0.2）
+      parameters:
+        - $ref: "#/components/parameters/TaskIdPath"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateReportRequest"
+      responses:
+        "202":
+          description: 报告任务已创建
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ApiResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/ReportJob"
+
+components:
+  parameters:
+    TaskIdPath:
+      name: taskId
+      in: path
+      required: true
+      schema:
+        type: string
+      example: task_20260607_001
+    ImageIdPath:
+      name: imageId
+      in: path
+      required: true
+      schema:
+        type: string
+      example: img_20260607_001
+    AnomalyIdPath:
+      name: anomalyId
+      in: path
+      required: true
+      schema:
+        type: string
+      example: ano_001
+    StatusQuery:
+      name: status
+      in: query
+      description: 任务状态筛选
+      schema:
+        $ref: "#/components/schemas/TaskStatus"
+    KeywordQuery:
+      name: keyword
+      in: query
+      description: 按任务名或区域名模糊搜索
+      schema:
+        type: string
+    PageQuery:
+      name: page
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        default: 1
+    PageSizeQuery:
+      name: pageSize
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+
+  responses:
+    BadRequest:
+      description: 请求参数错误
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ApiResponse"
+          example:
+            code: 40001
+            message: invalid request
+            data: null
+    NotFound:
+      description: 资源不存在
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ApiResponse"
+          example:
+            code: 40401
+            message: not found
+            data: null
+
+  schemas:
+    ApiResponse:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: integer
+          description: "0 表示成功，非 0 为业务错误码"
+          example: 0
+        message:
+          type: string
+          example: ok
+        data:
+          description: 业务载荷，错误时可为 null
+          nullable: true
+
+    TaskStatus:
+      type: string
+      enum: [draft, processing, ready, archived]
+      description: |
+        - draft：草稿
+        - processing：分析中
+        - ready：可核查
+        - archived：已归档
+
+    TaskPriority:
+      type: string
+      enum: [low, normal, urgent]
+
+    SceneType:
+      type: string
+      enum:
+        - emergency_disaster
+        - construction_change
+        - daily_patrol
+        - other
+
+    TaskStats:
+      type: object
+      properties:
+        imageCount:
+          type: integer
+          minimum: 0
+        anomalyCount:
+          type: integer
+          minimum: 0
+        confirmedCount:
+          type: integer
+          minimum: 0
+        highRiskCount:
+          type: integer
+          minimum: 0
+        confidenceAvg:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 1
+
+    Task:
+      type: object
+      required: [id, name, status, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        sceneType:
+          $ref: "#/components/schemas/SceneType"
+        areaName:
+          type: string
+        status:
+          $ref: "#/components/schemas/TaskStatus"
+        priority:
+          $ref: "#/components/schemas/TaskPriority"
+        operator:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        stats:
+          $ref: "#/components/schemas/TaskStats"
+
+    CreateTaskRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+        sceneType:
+          $ref: "#/components/schemas/SceneType"
+        areaName:
+          type: string
+        priority:
+          $ref: "#/components/schemas/TaskPriority"
+        operator:
+          type: string
+
+    AnalyseType:
+      type: string
+      enum: [building, road]
+      description: 对应 Android `AnalyseType`（0=building, 1=road）
+
+    AnalyseStatus:
+      type: string
+      enum: [pending, done, failed]
+      description: 对应 Android `AnalyseStatus`（0=pending, 1=done, 2=failed）
+
+    InspectionUiState:
+      type: object
+      description: |
+        端侧 UI 状态，由 `InspectionFacade.state`（StateFlow）暴露给 `skyedge-ui`。
+        Kotlin：`com.example.skyedge.core.api.InspectionUiState`
+      properties:
+        statusMessage:
+          type: string
+          example: 模型加载成功，请选择图片
+        isLoadingModel:
+          type: boolean
+        isInferring:
+          type: boolean
+        isModelReady:
+          type: boolean
+        lastMaskPath:
+          type: string
+          nullable: true
+          description: 最近一次检测的 mask 绝对路径
+        selectedModelKey:
+          type: string
+          enum: [building, road]
+        recentRecords:
+          type: array
+          items:
+            $ref: "#/components/schemas/InspectionRecordItem"
+        mapSession:
+          nullable: true
+          allOf:
+            - $ref: "#/components/schemas/MapSessionUiModel"
+
+    InspectionRecordItem:
+      type: object
+      description: Room 历史列表展示项
+      properties:
+        localUrl:
+          type: string
+        analyseType:
+          type: string
+          example: BUILDING
+        status:
+          type: string
+          example: DONE
+        detail:
+          type: string
+          example: 占比 12.3%
+
+    GeoLatLng:
+      type: object
+      required: [lat, lng]
+      properties:
+        lat:
+          type: number
+          format: double
+        lng:
+          type: number
+          format: double
+
+    GeoBounds:
+      type: object
+      required: [sw, ne]
+      properties:
+        sw:
+          $ref: "#/components/schemas/GeoLatLng"
+        ne:
+          $ref: "#/components/schemas/GeoLatLng"
+
+    GeoMetadata:
+      type: object
+      description: GeoTIFF 地理元数据；WGS84 为真源，GCJ-02 仅用于高德地图展示。
+      properties:
+        crs:
+          type: string
+          example: EPSG:4326
+        source_width:
+          type: integer
+        source_height:
+          type: integer
+        preview_width:
+          type: integer
+        preview_height:
+          type: integer
+        model_input_width:
+          type: integer
+          example: 512
+        model_input_height:
+          type: integer
+          example: 512
+        bounds_wgs84:
+          $ref: "#/components/schemas/GeoBounds"
+        bounds_gcj02:
+          $ref: "#/components/schemas/GeoBounds"
+        ortho_preview_path:
+          type: string
+        mask_overlay_path:
+          type: string
+
+    MapSessionUiModel:
+      type: object
+      description: 地图页 UI 会话状态，由 `InspectionUiState.mapSession` 暴露。
+      properties:
+        sessionId:
+          type: string
+        boundsGcj02:
+          $ref: "#/components/schemas/GeoBounds"
+        orthoPreviewPath:
+          type: string
+        maskOverlayPath:
+          type: string
+          nullable: true
+        showOrtho:
+          type: boolean
+        showMask:
+          type: boolean
+        maskAlpha:
+          type: number
+          format: float
+        isLoadingGeo:
+          type: boolean
+        geoError:
+          type: string
+          nullable: true
+
+    ModelChoice:
+      type: object
+      description: 可切换的分割模型
+      properties:
+        key:
+          type: string
+          enum: [building, road]
+        label:
+          type: string
+          example: Building
+        specAsset:
+          type: string
+          description: assets 内 model_spec.json 相对路径
+          example: models/building_unet_efficientnetb0_v1/model_spec.json
+
+    SegmentationSummary:
+      type: object
+      description: 端侧分割 `summary_json` 结构（与 SkyEdge 产出对齐）
+      properties:
+        task:
+          type: string
+          example: segmentation
+        model_id:
+          type: string
+          example: building_unet_efficientnetb0_v1
+        model_version:
+          type: string
+          description: 实际加载的 .pt 资产路径或版本标识
+        analyse_type:
+          type: string
+          enum: [building, road]
+        local_url:
+          type: string
+          description: 端侧工作目录；服务端可映射为 storagePath
+        storagePath:
+          type: string
+          description: 服务端存储根路径（与 local_url 二选一或同时存在）
+        mask_path:
+          type: string
+          description: mask PNG 绝对路径或可被客户端访问的 URL
+        defect_area_ratio:
+          type: number
+          format: double
+          description: 目标区域占图像面积比例，0~1
+        inference_ms:
+          type: integer
+          format: int64
+        num_classes:
+          type: integer
+        threshold:
+          type: number
+          format: double
+        class_pixels:
+          type: object
+          additionalProperties:
+            type: integer
+        geo:
+          nullable: true
+          allOf:
+            - $ref: "#/components/schemas/GeoMetadata"
+
+    AnalysisJob:
+      type: object
+      required: [id, taskId, status, analyseType, createdAt]
+      description: 分析作业，映射 `imgrecord.ImageRecord`
+      properties:
+        id:
+          type: string
+          description: 影像/作业 ID（imageId）
+        taskId:
+          type: string
+        storagePath:
+          type: string
+          description: 对应 ImageRecord.localUrl
+        imgUrl:
+          type: string
+          description: 原始影像 URI 字符串，对应 ImageRecord.imgUrl
+        analyseType:
+          $ref: "#/components/schemas/AnalyseType"
+        status:
+          $ref: "#/components/schemas/AnalyseStatus"
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        summary:
+          $ref: "#/components/schemas/SegmentationSummary"
+        errInfo:
+          type: string
+          nullable: true
+
+    TaskImage:
+      allOf:
+        - $ref: "#/components/schemas/AnalysisJob"
+        - type: object
+          properties:
+            thumbnailUrl:
+              type: string
+              format: uri
+              nullable: true
+
+    RegisterImageRequest:
+      type: object
+      required: [analyseType]
+      properties:
+        imgUrl:
+          type: string
+          description: 客户端相册/云端 URI（`uri.toString()`）
+        analyseType:
+          $ref: "#/components/schemas/AnalyseType"
+        storagePath:
+          type: string
+          description: 可选，客户端预分配目录；服务端也可自动生成
+
+    LayerBundle:
+      type: object
+      required: [imageId, original]
+      properties:
+        imageId:
+          type: string
+        original:
+          $ref: "#/components/schemas/LayerRef"
+        mask:
+          $ref: "#/components/schemas/LayerRef"
+        change:
+          $ref: "#/components/schemas/LayerRef"
+        annotations:
+          type: array
+          items:
+            $ref: "#/components/schemas/AnnotationRef"
+        defaultOpacity:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 1
+          example: 0.68
+
+    LayerRef:
+      type: object
+      required: [url]
+      properties:
+        url:
+          type: string
+          format: uri
+        width:
+          type: integer
+        height:
+          type: integer
+        mimeType:
+          type: string
+          example: image/png
+
+    AnnotationRef:
+      type: object
+      properties:
+        anomalyId:
+          type: string
+        bbox:
+          $ref: "#/components/schemas/BoundingBox"
+
+    BoundingBox:
+      type: object
+      description: 归一化坐标，相对原图宽高的比例 0~1
+      required: [x, y, width, height]
+      properties:
+        x:
+          type: number
+          format: float
+        y:
+          type: number
+          format: float
+        width:
+          type: number
+          format: float
+        height:
+          type: number
+          format: float
+
+    Severity:
+      type: string
+      enum: [low, medium, high, critical]
+
+    ReviewStatus:
+      type: string
+      enum: [pending, confirmed, dismissed]
+
+    AnomalyType:
+      type: string
+      enum:
+        - road_damage
+        - building_change
+        - debris
+        - vegetation
+        - other
+
+    Anomaly:
+      type: object
+      required: [id, title, type, severity, confidence, reviewStatus]
+      properties:
+        id:
+          type: string
+        imageId:
+          type: string
+          nullable: true
+        title:
+          type: string
+        type:
+          $ref: "#/components/schemas/AnomalyType"
+        severity:
+          $ref: "#/components/schemas/Severity"
+        confidence:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 1
+        reviewStatus:
+          $ref: "#/components/schemas/ReviewStatus"
+        locationText:
+          type: string
+        bbox:
+          $ref: "#/components/schemas/BoundingBox"
+        suggestion:
+          type: string
+        thumbnailUrl:
+          type: string
+          format: uri
+          nullable: true
+
+    ReviewAnomalyRequest:
+      type: object
+      required: [reviewStatus]
+      properties:
+        reviewStatus:
+          type: string
+          enum: [confirmed, dismissed]
+        comment:
+          type: string
+
+    ReportFormat:
+      type: string
+      enum: [image, pdf, json, csv]
+
+    CreateReportRequest:
+      type: object
+      required: [formats]
+      properties:
+        title:
+          type: string
+        formats:
+          type: array
+          minItems: 1
+          items:
+            $ref: "#/components/schemas/ReportFormat"
+
+    ReportJobStatus:
+      type: string
+      enum: [pending, processing, done, failed]
+
+    ReportExport:
+      type: object
+      properties:
+        format:
+          $ref: "#/components/schemas/ReportFormat"
+        downloadUrl:
+          type: string
+          format: uri
+        expiresAt:
+          type: string
+          format: date-time
+
+    ReportSummary:
+      type: object
+      properties:
+        totalAnomalies:
+          type: integer
+        confirmed:
+          type: integer
+        highRisk:
+          type: integer
+        conclusion:
+          type: string
+
+    ReportJob:
+      type: object
+      required: [id, taskId, status, createdAt]
+      properties:
+        id:
+          type: string
+        taskId:
+          type: string
+        title:
+          type: string
+        status:
+          $ref: "#/components/schemas/ReportJobStatus"
+        createdAt:
+          type: string
+          format: date-time
+        generatedAt:
+          type: string
+          format: date-time
+          nullable: true
+        summary:
+          $ref: "#/components/schemas/ReportSummary"
+        exports:
+          type: array
+          items:
+            $ref: "#/components/schemas/ReportExport"
+
+  examples:
+    CreateTaskRequest:
+      value:
+        name: 青溪镇暴雨后道路与建筑核查
+        sceneType: emergency_disaster
+        areaName: 青溪镇东桥片区
+        priority: urgent
+        operator: 王工
+
+    TaskListResponse:
+      value:
+        code: 0
+        message: ok
+        data:
+          - id: task_20260607_001
+            name: 青溪镇暴雨后道路与建筑核查
+            sceneType: emergency_disaster
+            areaName: 青溪镇东桥片区
+            status: ready
+            priority: urgent
+            operator: 王工
+            createdAt: "2026-06-07T08:30:00+08:00"
+            updatedAt: "2026-06-07T10:18:00+08:00"
+            stats:
+              imageCount: 12
+              anomalyCount: 7
+              confirmedCount: 3
+              highRiskCount: 2
+              confidenceAvg: 0.86
+          - id: task_20260607_002
+            name: 工业园施工边界变化复核
+            sceneType: construction_change
+            areaName: 河西工业园三期
+            status: processing
+            priority: normal
+            operator: 李工
+            createdAt: "2026-06-07T09:20:00+08:00"
+            updatedAt: "2026-06-07T09:52:00+08:00"
+            stats:
+              imageCount: 8
+              anomalyCount: 2
+              confirmedCount: 0
+              highRiskCount: 0
+              confidenceAvg: 0.73
+
+    AnalysisJobAccepted:
+      value:
+        code: 0
+        message: accepted
+        data:
+          id: img_20260607_001
+          taskId: task_20260607_001
+          storagePath: /data/user/0/com.example.skyedge/files/analysis/3f2a1b9c/
+          imgUrl: content://media/external/images/media/10001
+          analyseType: building
+          status: pending
+          createdAt: "2026-06-07T10:20:00+08:00"
+          updatedAt: "2026-06-07T10:20:00+08:00"
+          summary: null
+          errInfo: null
+
+    LayerBundle:
+      value:
+        code: 0
+        message: ok
+        data:
+          imageId: img_20260607_001
+          original:
+            url: https://cdn.example.com/tasks/task_20260607_001/original.jpg
+            width: 1920
+            height: 1080
+            mimeType: image/jpeg
+          mask:
+            url: https://cdn.example.com/tasks/task_20260607_001/mask.png
+            width: 512
+            height: 512
+            mimeType: image/png
+          change:
+            url: https://cdn.example.com/tasks/task_20260607_001/change.png
+            width: 512
+            height: 512
+            mimeType: image/png
+          annotations:
+            - anomalyId: ano_001
+              bbox:
+                x: 0.45
+                y: 0.35
+                width: 0.2
+                height: 0.1
+          defaultOpacity: 0.68
+
+x-inProcessApi:
+  description: |
+    端侧 Android 进程内契约（`InspectionFacade`）。用于 UI 与 core 协同及字段对齐；
+    **不是**远程 HTTP 端点，本项目运行时也不依赖下列 REST paths 的实现。
+  module: skyedge-core
+  interface: com.example.skyedge.core.api.InspectionFacade
+  operations:
+    loadModel:
+      summary: 加载 TorchScript 模型
+      restEquivalent: null
+      notes: 端侧专有；读取 skyedge-core assets 内 model_spec.json
+    switchModel:
+      summary: 切换 Building / Road 模型
+      restEquivalent: null
+    infer:
+      summary: 登记影像并等待分析完成
+      restEquivalent: POST /tasks/{taskId}/images + 轮询至 status=done
+      kotlin: suspend fun infer(uri: Uri)
+    loadGeoTiff:
+      summary: 解析 GeoTIFF、生成 preview.png 与 geo.json sidecar
+      restEquivalent: null
+      kotlin: suspend fun loadGeoTiff(uri: Uri)
+    inferMapSession:
+      summary: 对当前 mapSession 的 preview.png 执行端侧分割推理
+      restEquivalent: null
+      kotlin: suspend fun inferMapSession()
+    setMapLayerVisibility:
+      summary: 切换正射图与 mask GroundOverlay 可见性
+      restEquivalent: null
+      kotlin: fun setMapLayerVisibility(showOrtho: Boolean, showMask: Boolean)
+    setMaskAlpha:
+      summary: 设置地图 mask 叠加透明度
+      restEquivalent: null
+      kotlin: fun setMaskAlpha(alpha: Float)
+    clearMapSession:
+      summary: 清除当前地图会话状态
+      restEquivalent: null
+      kotlin: fun clearMapSession()
+    benchmark:
+      summary: 当前图连跑 N 次测时延
+      restEquivalent: null
+    refreshHistory:
+      summary: 刷新最近检测记录
+      restEquivalent: GET /tasks/{taskId}/images
+    close:
+      summary: 释放 PyTorch 模块
+      restEquivalent: null
+  fakeImplementation: com.example.skyedge.core.impl.FakeInspectionFacade

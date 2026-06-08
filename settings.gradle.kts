@@ -19,10 +19,13 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
+        maven { url = uri("https://a.amap.com/android/maven") }
     }
 }
 
 rootProject.name = "SkyEdge"
 include(":app")
 include(":imgrecord")
+include(":skyedge-core")
+include(":skyedge-ui")
  

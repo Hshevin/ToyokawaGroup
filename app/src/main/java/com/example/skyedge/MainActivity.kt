@@ -2,9 +2,6 @@ package com.example.skyedge
 
 import android.Manifest
 import android.content.pm.PackageManager
-import android.graphics.Bitmap
-import android.graphics.BitmapFactory
-import android.graphics.Color
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -13,35 +10,21 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
-import androidx.compose.foundation.Image
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.material3.Button
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
-import coil.compose.AsyncImage
+import com.example.skyedge.ui.inspection.InferenceViewModel
+import com.example.skyedge.ui.inspection.InspectionScreen
+import com.example.skyedge.ui.map.MapScreen
 
 class MainActivity : ComponentActivity() {
 
@@ -50,10 +33,13 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        if (!hasAmapApiKey()) {
+            viewModel.updateStatus("请在 local.properties 配置 AMAP_API_KEY 后使用地图")
+        }
 
         setContent {
-            val uiState = viewModel.uiState
-
+            var selectedTab by rememberSaveable { mutableStateOf(AppTab.MAP) }
+            val isAmapKeyConfigured = remember { hasAmapApiKey() }
             val galleryLauncher = rememberLauncherForActivityResult(
                 contract = ActivityResultContracts.GetContent(),
                 onResult = { uri: Uri? ->
@@ -73,148 +59,45 @@ class MainActivity : ComponentActivity() {
                 },
             )
 
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .verticalScroll(rememberScrollState())
-                    .padding(16.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-            ) {
-                Text(
-                    text = "低空巡检 AI 原型",
-                    style = MaterialTheme.typography.headlineMedium,
-                )
-                Spacer(modifier = Modifier.height(12.dp))
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    viewModel.modelChoices.forEach { choice ->
-                        Button(
-                            onClick = { viewModel.switchModel(choice.key) },
-                            enabled = !uiState.isInferring && !uiState.isLoadingModel,
-                        ) {
-                            val isSelected = uiState.selectedModelKey == choice.key
-                            Text(if (isSelected) "已选 ${choice.label}" else "切换 ${choice.label}")
-                        }
-                    }
-                }
-                Spacer(modifier = Modifier.height(20.dp))
-
-                val maskPath = uiState.lastMaskPath
-                val overlayBitmap = remember(maskPath) {
-                    buildMaskOverlay(maskPath)
-                }
-                if (selectedImageUri != null) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally),
-                        verticalAlignment = Alignment.Top,
-                    ) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text("原图", style = MaterialTheme.typography.labelMedium)
-                            Spacer(modifier = Modifier.height(6.dp))
-                            AsyncImage(
-                                model = selectedImageUri,
-                                contentDescription = "Original Image",
-                                modifier = Modifier.size(170.dp),
-                                contentScale = ContentScale.Crop,
+            Scaffold(
+                bottomBar = {
+                    NavigationBar {
+                        AppTab.entries.forEach { tab ->
+                            NavigationBarItem(
+                                selected = selectedTab == tab,
+                                onClick = { selectedTab = tab },
+                                label = { Text(tab.label) },
+                                icon = {},
                             )
                         }
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text("处理后对比", style = MaterialTheme.typography.labelMedium)
-                            Spacer(modifier = Modifier.height(6.dp))
-                            Box(modifier = Modifier.size(170.dp)) {
-                                AsyncImage(
-                                    model = selectedImageUri,
-                                    contentDescription = "Processed Base Image",
-                                    modifier = Modifier.matchParentSize(),
-                                    contentScale = ContentScale.Crop,
-                                )
-                                if (overlayBitmap != null) {
-                                    Image(
-                                        bitmap = overlayBitmap.asImageBitmap(),
-                                        contentDescription = "Mask Overlay",
-                                        modifier = Modifier.matchParentSize(),
-                                        contentScale = ContentScale.Crop,
-                                    )
-                                }
-                            }
-                        }
                     }
-                }
-
-                Spacer(modifier = Modifier.height(20.dp))
-
-                if (uiState.isLoadingModel || uiState.isInferring) {
-                    CircularProgressIndicator()
-                    Spacer(modifier = Modifier.height(12.dp))
-                }
-
-                Button(
-                    onClick = {
-                        if (needsReadImagesPermission() &&
-                            ContextCompat.checkSelfPermission(
-                                this@MainActivity,
-                                Manifest.permission.READ_MEDIA_IMAGES,
-                            ) != PackageManager.PERMISSION_GRANTED
-                        ) {
-                            permissionLauncher.launch(Manifest.permission.READ_MEDIA_IMAGES)
-                        } else {
-                            galleryLauncher.launch("image/*")
-                        }
-                    },
-                    enabled = uiState.isModelReady && !uiState.isInferring,
-                ) {
-                    Text(
-                        when {
-                            uiState.isLoadingModel -> "模型加载中"
-                            !uiState.isModelReady -> "模型未就绪"
-                            uiState.isInferring -> "推理中"
-                            else -> "导入现场照片"
+                },
+            ) { innerPadding ->
+                when (selectedTab) {
+                    AppTab.MAP -> MapScreen(
+                        viewModel = viewModel,
+                        isAmapKeyConfigured = isAmapKeyConfigured,
+                        modifier = Modifier.padding(innerPadding),
+                    )
+                    AppTab.INSPECTION -> InspectionScreen(
+                        viewModel = viewModel,
+                        selectedImageUri = selectedImageUri,
+                        onPickImage = {
+                            if (needsReadImagesPermission() &&
+                                ContextCompat.checkSelfPermission(
+                                    this@MainActivity,
+                                    Manifest.permission.READ_MEDIA_IMAGES,
+                                ) != PackageManager.PERMISSION_GRANTED
+                            ) {
+                                permissionLauncher.launch(Manifest.permission.READ_MEDIA_IMAGES)
+                            } else {
+                                galleryLauncher.launch("image/*")
+                            }
+                        },
+                        onBenchmark = {
+                            selectedImageUri?.let { viewModel.benchmarkCurrentImage(it, runs = 10) }
                         },
                     )
-                }
-
-                Spacer(modifier = Modifier.height(12.dp))
-                Button(
-                    onClick = {
-                        selectedImageUri?.let { viewModel.benchmarkCurrentImage(it, runs = 10) }
-                    },
-                    enabled = uiState.isModelReady && !uiState.isInferring && selectedImageUri != null,
-                ) {
-                    Text("当前图连跑10次")
-                }
-
-                Spacer(modifier = Modifier.height(20.dp))
-                Text(text = uiState.statusMessage)
-
-                if (uiState.recentRecords.isNotEmpty()) {
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Text(
-                        text = "本地检测记录（Room）",
-                        style = MaterialTheme.typography.titleSmall,
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(max = 180.dp)
-                            .verticalScroll(rememberScrollState()),
-                        verticalArrangement = Arrangement.spacedBy(6.dp),
-                    ) {
-                        uiState.recentRecords.forEach { item ->
-                            Text(
-                                text = buildString {
-                                    append("[${item.status}] ${item.analyseType}")
-                                    if (item.detail.isNotBlank()) append(" · ${item.detail}")
-                                    append("\n")
-                                    append(item.localUrl)
-                                },
-                                style = MaterialTheme.typography.bodySmall,
-                            )
-                        }
-                    }
                 }
             }
         }
@@ -223,25 +106,16 @@ class MainActivity : ComponentActivity() {
     private fun needsReadImagesPermission(): Boolean =
         Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
 
-    private fun buildMaskOverlay(maskPath: String?): Bitmap? {
-        if (maskPath.isNullOrBlank()) return null
-        val mask = BitmapFactory.decodeFile(maskPath) ?: return null
-        val width = mask.width
-        val height = mask.height
-        val src = IntArray(width * height)
-        val dst = IntArray(width * height)
-        mask.getPixels(src, 0, width, 0, 0, width, height)
-        for (i in src.indices) {
-            val gray = src[i] and 0xFF
-            dst[i] = if (gray > 0) {
-                Color.argb((0.42f * 255).toInt(), 255, 0, 0)
-            } else {
-                Color.TRANSPARENT
-            }
-        }
-        val overlay = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
-        overlay.setPixels(dst, 0, width, 0, 0, width, height)
-        mask.recycle()
-        return overlay
+    private fun hasAmapApiKey(): Boolean {
+        val appInfo = packageManager.getApplicationInfo(
+            packageName,
+            PackageManager.GET_META_DATA,
+        )
+        return appInfo.metaData?.getString("com.amap.api.v2.apikey").orEmpty().isNotBlank()
+    }
+
+    private enum class AppTab(val label: String) {
+        MAP("地图"),
+        INSPECTION("检测"),
     }
 }

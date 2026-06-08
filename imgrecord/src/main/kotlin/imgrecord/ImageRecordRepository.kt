@@ -44,6 +44,10 @@ class ImageRecordRepository(
 
     suspend fun insert(imgUrl: String, analyseType: AnalyseType): String {
         val localUrl = generateLocalUrl(requireLocalUrlPrefix())
+        return insertAt(localUrl, imgUrl, analyseType)
+    }
+
+    suspend fun insertAt(localUrl: String, imgUrl: String, analyseType: AnalyseType): String {
         File(localUrl).mkdirs()
         val now = System.currentTimeMillis()
         dao.insert(
