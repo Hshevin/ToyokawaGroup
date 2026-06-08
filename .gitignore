@@ -19,7 +19,7 @@ keystore/
 *.jks
 *.keystore
 .cursor
-
+test_img/
 # Release signing (local only — never commit passwords or .jks)
 /keystore/*.jks
 /keystore/keystore.properties
