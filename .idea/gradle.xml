@@ -11,6 +11,8 @@
             <option value="$PROJECT_DIR$" />
             <option value="$PROJECT_DIR$/app" />
             <option value="$PROJECT_DIR$/imgrecord" />
+            <option value="$PROJECT_DIR$/skyedge-core" />
+            <option value="$PROJECT_DIR$/skyedge-ui" />
           </set>
         </option>
       </GradleProjectSettings>
