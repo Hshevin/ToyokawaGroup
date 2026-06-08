@@ -1,6 +1,12 @@
 ﻿{
   "model_id": "road_unet_efficientnetb0_v1",
-  "asset_file": "models/road_unet_efficientnetb0_v1/road_unet_efficientnetb0_v1_torchscript.pt",
+  "asset_file": "optimized/road_unet_efficientnetb0_v1_fp8.fp8pkg",
+  "quantization": {
+    "method": "fp8_e4m3fn_weight_only",
+    "granularity": "per_tensor",
+    "runtime_asset": "optimized/road_unet_efficientnetb0_v1_fp8_runtime.pt",
+    "packed_size_mb": 3.79
+  },
   "task_type": "segmentation",
   "target": "road_area",
   "input": {

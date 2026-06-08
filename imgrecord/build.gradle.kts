@@ -1,7 +1,6 @@
 plugins {
-    id("com.android.library") version "9.2.1"
-    id("org.jetbrains.kotlin.android") version "2.2.10"
-    id("com.google.devtools.ksp") version "2.2.10-2.0.2"
+    id("com.android.library")
+    id("com.google.devtools.ksp")
 }
 
 android {
@@ -18,16 +17,19 @@ android {
     }
 
     testOptions {
-        unitTests.isIncludeAndroidResources = true
+        unitTests {
+            isIncludeAndroidResources = true
+        }
     }
 }
 
 dependencies {
-    val roomVersion = "2.6.1"
+    val roomVersion = "2.7.2"
 
     implementation("androidx.room:room-runtime:$roomVersion")
     implementation("androidx.room:room-ktx:$roomVersion")
     ksp("androidx.room:room-compiler:$roomVersion")
+
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
 
     testImplementation("junit:junit:4.13.2")

@@ -20,7 +20,7 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
     androidResources {
-        noCompress += listOf("pt", "onnx", "tflite")
+        noCompress += listOf("pt", "onnx", "tflite", "fp8pkg")
     }
     buildTypes {
         release {

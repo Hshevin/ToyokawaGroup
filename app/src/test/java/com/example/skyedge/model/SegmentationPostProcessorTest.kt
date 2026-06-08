@@ -8,6 +8,7 @@ class SegmentationPostProcessorTest {
     private val spec = LoadedModelSpec(
         modelId = "test",
         assetFile = null,
+        quantizationRuntimeAsset = null,
         taskType = TaskType.SEGMENTATION,
         inputHeight = 2,
         inputWidth = 2,

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Compare App-exported mask PNG with algorithm reference mask (class index grayscale)."""
+"""Compare exported mask PNG with reference mask."""
 
 from __future__ import annotations
 

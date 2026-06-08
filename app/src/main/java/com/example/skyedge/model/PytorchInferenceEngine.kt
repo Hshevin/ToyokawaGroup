@@ -37,10 +37,22 @@ class PytorchInferenceEngine(
         loadedAssetName = null
         spec = ModelSpecLoader.load(context, modelSpecAsset)
         val assetFile = spec.assetFile ?: error("model_spec 缺少 asset_file")
-        check(ModelLoader.assetExists(context, assetFile)) { "模型文件不存在: $assetFile" }
-        module = Module.load(ModelLoader.assetFilePath(context, assetFile))
+        if (assetFile.endsWith(".fp8pkg")) {
+            val runtimeAsset = assetFile.removeSuffix(".fp8pkg") + "_runtime.pt"
+            check(ModelLoader.assetExists(context, assetFile)) { "模型文件不存在: $assetFile" }
+            check(ModelLoader.assetExists(context, runtimeAsset)) { "FP8 运行时模型不存在: $runtimeAsset" }
+        } else {
+            check(ModelLoader.assetExists(context, assetFile)) { "模型文件不存在: $assetFile" }
+        }
+        module = Module.load(ModelLoader.resolveModelAsset(context, assetFile, modelCacheToken(spec)))
         loadedAssetName = assetFile
         }
+    }
+
+    private fun modelCacheToken(spec: LoadedModelSpec): String {
+        val asset = spec.assetFile ?: return spec.modelId
+        val runtime = spec.quantizationRuntimeAsset
+        return if (runtime.isNullOrBlank()) asset else "$asset|$runtime"
     }
 
     override fun infer(bitmap: Bitmap): Result<InspectionResult> = synchronized(lock) {

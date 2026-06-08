@@ -73,11 +73,47 @@
 
 ### 4.1 量化路线结论
 
+#### Dynamic INT8（已废弃）
+
 - 动态量化（linear-only）在本模型结构上**无收益**：
   - 体积不降（约持平甚至略增）
   - 时延无明显改善（部分场景更慢）
 
-结论：本轮不采用 dynamic int8 作为交付候选。
+结论：不采用 dynamic int8。
+
+#### FP8 调参结果（真正实现体积压缩）
+
+工具：`tools/tune_fp8_unet.py`（12 组网格搜索）+ `tools/fp8_quant_utils.py`（FP8 打包 `.fp8pkg`）
+
+**最优配置（building / road 一致）**：
+
+| 参数 | 值 |
+|------|-----|
+| 格式 | **E4M3**（E5M2 掉点过大） |
+| 粒度 | **per_tensor** |
+| 跳过层 | stem + segmentation_head + **decoder**（decoder 保持 FP32） |
+
+| 指标 | FP32 baseline `.pt` | **FP8 `.fp8pkg`** | 运行时 `_runtime.pt` |
+|------|---------------------|-------------------|---------------------|
+| 体积 | ~22.3 MB | **~3.79 MB（17%）** | ~24.6 MB（推理用） |
+| Building IoU 掉点 | — | **0.46%** | — |
+| Road IoU 掉点 | — | **-0.77%**（略升） | — |
+
+**App 接入**：`model_spec.json` 的 `asset_file` 指向 `*.fp8pkg`；`ModelLoader` 自动加载同目录 `{name}_runtime.pt` 推理。
+
+报告：`docs/fp8_tune_building.json`、`docs/fp8_tune_road.json`
+
+**Building 剪枝 S2 + FP8（推荐接入）** — `docs/fp8_tune_building_pruned.json`：
+
+| 指标 | 剪枝 S2 FP32 | 剪枝 + FP8 |
+|------|--------------|------------|
+| IoU 掉点（相对剪枝 baseline） | — | **0.72%** |
+| `.fp8pkg` | — | **2.38 MB** |
+| `_runtime.pt` | ~15.2 MB | ~15.2 MB |
+
+App building 已指向 `building_unet_efficientnetb0_v1_pruned_fp8.fp8pkg`（剪枝与 FP8 叠加）。
+
+Road 仅 FP8（剪枝实验未通过，无法叠加）。
 
 ### 4.2 剪枝路线结论（building）
 

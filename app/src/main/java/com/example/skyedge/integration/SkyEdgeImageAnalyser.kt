@@ -2,10 +2,10 @@ package com.example.skyedge.integration
 
 import android.content.Context
 import android.net.Uri
+import com.example.skyedge.ModelChoice
+import com.example.skyedge.domain.InspectionResult
 import com.example.skyedge.model.ImagePreprocessor
 import com.example.skyedge.model.InferenceEngine
-import com.example.skyedge.model.ModelChoice
-import com.example.skyedge.domain.InspectionResult
 import imgrecord.ImageAnalyser
 import imgrecord.model.AnalyseResult
 import imgrecord.model.AnalyseStatus
@@ -15,10 +15,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 
-/**
- * 对接 [Hshevin/ToyokawaGroup-DatabaseComponent](https://github.com/Hshevin/ToyokawaGroup-DatabaseComponent)
- * 的 [ImageAnalyser] 接口：由 ImageRecordRepository 在 insert 后异步回调。
- */
 class SkyEdgeImageAnalyser(
     private val context: Context,
     private val engine: InferenceEngine,

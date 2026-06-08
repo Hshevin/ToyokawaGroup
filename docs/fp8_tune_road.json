@@ -1,0 +1,341 @@
+{
+  "baseline_iou": 0.6614489823579788,
+  "baseline_pt_mb": 22.259726524353027,
+  "iou_drop_gate_pct": 1.5,
+  "eval_threshold": 0.5999999999999999,
+  "candidates": [
+    {
+      "tag": "e4m3fn_per_tensor_default",
+      "config": {
+        "fmt": "e4m3fn",
+        "granularity": "per_tensor",
+        "skip_prefixes": [
+          "encoder._conv_stem",
+          "segmentation_head"
+        ]
+      },
+      "eval": {
+        "iou": 0.6695466876029968,
+        "f1": 0.7955498324125494,
+        "precision": 0.8029898881912232,
+        "recall": 0.7933725953102112
+      },
+      "fp8_pack_mb": 5.926974296569824,
+      "runtime_pt_mb": 24.603373527526855,
+      "manifest_blob_kb": 6052.2265625,
+      "pack_path": "c:\\Users\\HUAWEI\\Desktop\\android\\app\\src\\main\\assets\\optimized\\road_fp8_tuned\\e4m3fn_per_tensor_default.fp8pkg",
+      "runtime_pt_path": "c:\\Users\\HUAWEI\\Desktop\\android\\app\\src\\main\\assets\\optimized\\road_fp8_tuned\\e4m3fn_per_tensor_default_runtime.pt",
+      "iou_drop_pct": -0.8097705245018072,
+      "pass_iou_gate": true,
+      "runtime_pt_vs_baseline": 1.1052864239194398,
+      "fp8_pack_vs_baseline": 0.2662644705039605
+    },
+    {
+      "tag": "e4m3fn_per_tensor_no_skip",
+      "config": {
+        "fmt": "e4m3fn",
+        "granularity": "per_tensor",
+        "skip_prefixes": []
+      },
+      "eval": {
+        "iou": 0.6550099521875381,
+        "f1": 0.7852103302717585,
+        "precision": 0.8024440348148346,
+        "recall": 0.776179027557373
+      },
+      "fp8_pack_mb": 5.9282426834106445,
+      "runtime_pt_mb": 24.61135959625244,
+      "manifest_blob_kb": 6053.21875,
+      "pack_path": "c:\\Users\\HUAWEI\\Desktop\\android\\app\\src\\main\\assets\\optimized\\road_fp8_tuned\\e4m3fn_per_tensor_no_skip.fp8pkg",
+      "runtime_pt_path": "c:\\Users\\HUAWEI\\Desktop\\android\\app\\src\\main\\assets\\optimized\\road_fp8_tuned\\e4m3fn_per_tensor_no_skip_runtime.pt",
+      "iou_drop_pct": 0.6439030170440674,
+      "pass_iou_gate": true,
+      "runtime_pt_vs_baseline": 1.1056451915223053,
+      "fp8_pack_vs_baseline": 0.266321451744922
+    },
+    {
+      "tag": "e4m3fn_per_tensor_skip_decoder",
+      "config": {
+        "fmt": "e4m3fn",
+        "granularity": "per_tensor",
+        "skip_prefixes": [
+          "encoder._conv_stem",
+          "segmentation_head",
+          "decoder"
+        ]
+      },
+      "eval": {
+        "iou": 0.6691478669643403,
+        "f1": 0.7952592978782069,
+        "precision": 0.8032084226608276,
+        "recall": 0.7926206409931182
+      },
+      "fp8_pack_mb": 3.7872142791748047,
+      "runtime_pt_mb": 24.621437072753906,
+      "manifest_blob_kb": 3862.9375,
+      "pack_path": "c:\\Users\\HUAWEI\\Desktop\\android\\app\\src\\main\\assets\\optimized\\road_fp8_tuned\\e4m3fn_per_tensor_skip_decoder.fp8pkg",
+      "runtime_pt_path": "c:\\Users\\HUAWEI\\Desktop\\android\\app\\src\\main\\assets\\optimized\\road_fp8_tuned\\e4m3fn_per_tensor_skip_decoder_runtime.pt",
+      "iou_drop_pct": -0.7698884606361478,
+      "pass_iou_gate": true,
+      "runtime_pt_vs_baseline": 1.1060979139082,
+      "fp8_pack_vs_baseline": 0.17013750258932614
+    },
+    {
+      "tag": "e4m3fn_per_channel_default",
+      "config": {
+        "fmt": "e4m3fn",
+        "granularity": "per_channel",
+        "skip_prefixes": [
+          "encoder._conv_stem",
+          "segmentation_head"
+        ]
+      },
+      "eval": {
+        "iou": 0.6632761120796203,
+        "f1": 0.7905198347811185,
+        "precision": 0.8191913485527038,
+        "recall": 0.7705054759979248
+      },
+      "fp8_pack_mb": 6.046343803405762,
+      "runtime_pt_mb": 24.61361312866211,
+      "manifest_blob_kb": 6174.171875,
+      "pack_path": "c:\\Users\\HUAWEI\\Desktop\\android\\app\\src\\main\\assets\\optimized\\road_fp8_tuned\\e4m3fn_per_channel_default.fp8pkg",
+      "runtime_pt_path": "c:\\Users\\HUAWEI\\Desktop\\android\\app\\src\\main\\assets\\optimized\\road_fp8_tuned\\e4m3fn_per_channel_default_runtime.pt",
+      "iou_drop_pct": -0.18271297216415627,
+      "pass_iou_gate": true,
+      "runtime_pt_vs_baseline": 1.105746429621848,
+      "fp8_pack_vs_baseline": 0.27162704792400844
+    },
+    {
+      "tag": "e4m3fn_per_channel_no_skip",
+      "config": {
+        "fmt": "e4m3fn",
+        "granularity": "per_channel",
+        "skip_prefixes": []
+      },
+      "eval": {
+        "iou": 0.6544503062963486,
+        "f1": 0.7842156477470051,
+        "precision": 0.8272382557392121,
+        "recall": 0.7537202835083008
+      },
+      "fp8_pack_mb": 6.047733306884766,
+      "runtime_pt_mb": 24.61361312866211,
+      "manifest_blob_kb": 6175.28515625,
+      "pack_path": "c:\\Users\\HUAWEI\\Desktop\\android\\app\\src\\main\\assets\\optimized\\road_fp8_tuned\\e4m3fn_per_channel_no_skip.fp8pkg",
+      "runtime_pt_path": "c:\\Users\\HUAWEI\\Desktop\\android\\app\\src\\main\\assets\\optimized\\road_fp8_tuned\\e4m3fn_per_channel_no_skip_runtime.pt",
+      "iou_drop_pct": 0.6998676061630182,
+      "pass_iou_gate": true,
+      "runtime_pt_vs_baseline": 1.105746429621848,
+      "fp8_pack_vs_baseline": 0.27168947023083617
+    },
+    {
+      "tag": "e4m3fn_per_channel_skip_decoder",
+      "config": {
+        "fmt": "e4m3fn",
+        "granularity": "per_channel",
+        "skip_prefixes": [
+          "encoder._conv_stem",
+          "segmentation_head",
+          "decoder"
+        ]
+      },
+      "eval": {
+        "iou": 0.6656461328268051,
+        "f1": 0.7922955595053649,
+        "precision": 0.8140718579292298,
+        "recall": 0.7784682452678681
+      },
+      "fp8_pack_mb": 3.9028091430664062,
+      "runtime_pt_mb": 24.623499870300293,
+      "manifest_blob_kb": 3981.046875,
+      "pack_path": "c:\\Users\\HUAWEI\\Desktop\\android\\app\\src\\main\\assets\\optimized\\road_fp8_tuned\\e4m3fn_per_channel_skip_decoder.fp8pkg",
+      "runtime_pt_path": "c:\\Users\\HUAWEI\\Desktop\\android\\app\\src\\main\\assets\\optimized\\road_fp8_tuned\\e4m3fn_per_channel_skip_decoder_runtime.pt",
+      "iou_drop_pct": -0.4197150468826294,
+      "pass_iou_gate": true,
+      "runtime_pt_vs_baseline": 1.1061905834000791,
+      "fp8_pack_vs_baseline": 0.17533050726371582
+    },
+    {
+      "tag": "e5m2_per_tensor_default",
+      "config": {
+        "fmt": "e5m2",
+        "granularity": "per_tensor",
+        "skip_prefixes": [
+          "encoder._conv_stem",
+          "segmentation_head"
+        ]
+      },
+      "eval": {
+        "iou": 0.6420438170433045,
+        "f1": 0.7754412616950095,
+        "precision": 0.827885627746582,
+        "recall": 0.7357004046440124
+      },
+      "fp8_pack_mb": 5.926972389221191,
+      "runtime_pt_mb": 24.6102933883667,
+      "manifest_blob_kb": 6052.2265625,
+      "pack_path": "c:\\Users\\HUAWEI\\Desktop\\android\\app\\src\\main\\assets\\optimized\\road_fp8_tuned\\e5m2_per_tensor_default.fp8pkg",
+      "runtime_pt_path": "c:\\Users\\HUAWEI\\Desktop\\android\\app\\src\\main\\assets\\optimized\\road_fp8_tuned\\e5m2_per_tensor_default_runtime.pt",
+      "iou_drop_pct": 1.9405165314674289,
+      "pass_iou_gate": false,
+      "runtime_pt_vs_baseline": 1.105597293005467,
+      "fp8_pack_vs_baseline": 0.2662643848178839
+    },
+    {
+      "tag": "e5m2_per_tensor_no_skip",
+      "config": {
+        "fmt": "e5m2",
+        "granularity": "per_tensor",
+        "skip_prefixes": []
+      },
+      "eval": {
+        "iou": 0.6358182549476623,
+        "f1": 0.7707671211993526,
+        "precision": 0.8192022502422333,
+        "recall": 0.7359889805316925
+      },
+      "fp8_pack_mb": 5.928240776062012,
+      "runtime_pt_mb": 24.61023235321045,
+      "manifest_blob_kb": 6053.21875,
+      "pack_path": "c:\\Users\\HUAWEI\\Desktop\\android\\app\\src\\main\\assets\\optimized\\road_fp8_tuned\\e5m2_per_tensor_no_skip.fp8pkg",
+      "runtime_pt_path": "c:\\Users\\HUAWEI\\Desktop\\android\\app\\src\\main\\assets\\optimized\\road_fp8_tuned\\e5m2_per_tensor_no_skip_runtime.pt",
+      "iou_drop_pct": 2.5630727410316467,
+      "pass_iou_gate": false,
+      "runtime_pt_vs_baseline": 1.1055945510510148,
+      "fp8_pack_vs_baseline": 0.2663213660588453
+    },
+    {
+      "tag": "e5m2_per_tensor_skip_decoder",
+      "config": {
+        "fmt": "e5m2",
+        "granularity": "per_tensor",
+        "skip_prefixes": [
+          "encoder._conv_stem",
+          "segmentation_head",
+          "decoder"
+        ]
+      },
+      "eval": {
+        "iou": 0.6389081984758377,
+        "f1": 0.773112474931409,
+        "precision": 0.8281508266925812,
+        "recall": 0.7315769910812377
+      },
+      "fp8_pack_mb": 3.787212371826172,
+      "runtime_pt_mb": 24.617921829223633,
+      "manifest_blob_kb": 3862.9375,
+      "pack_path": "c:\\Users\\HUAWEI\\Desktop\\android\\app\\src\\main\\assets\\optimized\\road_fp8_tuned\\e5m2_per_tensor_skip_decoder.fp8pkg",
+      "runtime_pt_path": "c:\\Users\\HUAWEI\\Desktop\\android\\app\\src\\main\\assets\\optimized\\road_fp8_tuned\\e5m2_per_tensor_skip_decoder_runtime.pt",
+      "iou_drop_pct": 2.254078388214109,
+      "pass_iou_gate": false,
+      "runtime_pt_vs_baseline": 1.1059399944689638,
+      "fp8_pack_vs_baseline": 0.1701374169032495
+    },
+    {
+      "tag": "e5m2_per_channel_default",
+      "config": {
+        "fmt": "e5m2",
+        "granularity": "per_channel",
+        "skip_prefixes": [
+          "encoder._conv_stem",
+          "segmentation_head"
+        ]
+      },
+      "eval": {
+        "iou": 0.6506560742855072,
+        "f1": 0.7825444312054722,
+        "precision": 0.8063999712467194,
+        "recall": 0.7690540790557862
+      },
+      "fp8_pack_mb": 6.046341896057129,
+      "runtime_pt_mb": 24.611318588256836,
+      "manifest_blob_kb": 6174.171875,
+      "pack_path": "c:\\Users\\HUAWEI\\Desktop\\android\\app\\src\\main\\assets\\optimized\\road_fp8_tuned\\e5m2_per_channel_default.fp8pkg",
+      "runtime_pt_path": "c:\\Users\\HUAWEI\\Desktop\\android\\app\\src\\main\\assets\\optimized\\road_fp8_tuned\\e5m2_per_channel_default_runtime.pt",
+      "iou_drop_pct": 1.0792908072471574,
+      "pass_iou_gate": true,
+      "runtime_pt_vs_baseline": 1.1056433492716575,
+      "fp8_pack_vs_baseline": 0.2716269622379318
+    },
+    {
+      "tag": "e5m2_per_channel_no_skip",
+      "config": {
+        "fmt": "e5m2",
+        "granularity": "per_channel",
+        "skip_prefixes": []
+      },
+      "eval": {
+        "iou": 0.64970483481884,
+        "f1": 0.7816828912971219,
+        "precision": 0.804677426815033,
+        "recall": 0.7702225625514985
+      },
+      "fp8_pack_mb": 6.047731399536133,
+      "runtime_pt_mb": 24.611257553100586,
+      "manifest_blob_kb": 6175.28515625,
+      "pack_path": "c:\\Users\\HUAWEI\\Desktop\\android\\app\\src\\main\\assets\\optimized\\road_fp8_tuned\\e5m2_per_channel_no_skip.fp8pkg",
+      "runtime_pt_path": "c:\\Users\\HUAWEI\\Desktop\\android\\app\\src\\main\\assets\\optimized\\road_fp8_tuned\\e5m2_per_channel_no_skip_runtime.pt",
+      "iou_drop_pct": 1.1744147539138772,
+      "pass_iou_gate": true,
+      "runtime_pt_vs_baseline": 1.1056406073172054,
+      "fp8_pack_vs_baseline": 0.2716893845447595
+    },
+    {
+      "tag": "e5m2_per_channel_skip_decoder",
+      "config": {
+        "fmt": "e5m2",
+        "granularity": "per_channel",
+        "skip_prefixes": [
+          "encoder._conv_stem",
+          "segmentation_head",
+          "decoder"
+        ]
+      },
+      "eval": {
+        "iou": 0.6533333241939545,
+        "f1": 0.7845035625492225,
+        "precision": 0.7958156526088714,
+        "recall": 0.782714205980301
+      },
+      "fp8_pack_mb": 3.9028072357177734,
+      "runtime_pt_mb": 24.61919116973877,
+      "manifest_blob_kb": 3981.046875,
+      "pack_path": "c:\\Users\\HUAWEI\\Desktop\\android\\app\\src\\main\\assets\\optimized\\road_fp8_tuned\\e5m2_per_channel_skip_decoder.fp8pkg",
+      "runtime_pt_path": "c:\\Users\\HUAWEI\\Desktop\\android\\app\\src\\main\\assets\\optimized\\road_fp8_tuned\\e5m2_per_channel_skip_decoder_runtime.pt",
+      "iou_drop_pct": 0.8115658164024264,
+      "pass_iou_gate": true,
+      "runtime_pt_vs_baseline": 1.1059970185529635,
+      "fp8_pack_vs_baseline": 0.1753304215776392
+    }
+  ],
+  "best": {
+    "tag": "e4m3fn_per_tensor_skip_decoder",
+    "config": {
+      "fmt": "e4m3fn",
+      "granularity": "per_tensor",
+      "skip_prefixes": [
+        "encoder._conv_stem",
+        "segmentation_head",
+        "decoder"
+      ]
+    },
+    "eval": {
+      "iou": 0.6691478669643403,
+      "f1": 0.7952592978782069,
+      "precision": 0.8032084226608276,
+      "recall": 0.7926206409931182
+    },
+    "fp8_pack_mb": 3.7872142791748047,
+    "runtime_pt_mb": 24.621437072753906,
+    "manifest_blob_kb": 3862.9375,
+    "pack_path": "c:\\Users\\HUAWEI\\Desktop\\android\\app\\src\\main\\assets\\optimized\\road_fp8_tuned\\e4m3fn_per_tensor_skip_decoder.fp8pkg",
+    "runtime_pt_path": "c:\\Users\\HUAWEI\\Desktop\\android\\app\\src\\main\\assets\\optimized\\road_fp8_tuned\\e4m3fn_per_tensor_skip_decoder_runtime.pt",
+    "iou_drop_pct": -0.7698884606361478,
+    "pass_iou_gate": true,
+    "runtime_pt_vs_baseline": 1.1060979139082,
+    "fp8_pack_vs_baseline": 0.17013750258932614
+  },
+  "canonical_pack": "c:\\Users\\HUAWEI\\Desktop\\android\\app\\src\\main\\assets\\optimized\\road_fp8_tuned\\best.fp8pkg",
+  "canonical_runtime_pt": "c:\\Users\\HUAWEI\\Desktop\\android\\app\\src\\main\\assets\\optimized\\road_fp8_tuned\\best_runtime.pt"
+}

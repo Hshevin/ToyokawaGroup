@@ -70,7 +70,6 @@ object SegmentationPostProcessor {
         val classIndices = IntArray(height * width)
         val counts = IntArray(2)
         for (i in classIndices.indices) {
-            // Treat output as logits, then sigmoid + threshold.
             val p = sigmoid(data[i])
             val clazz = if (p >= threshold) 1 else 0
             classIndices[i] = clazz

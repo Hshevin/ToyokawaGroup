@@ -1,14 +1,5 @@
 #!/usr/bin/env python3
-"""
-Benchmark TorchScript segmentation models delivered for SkyEdge.
-
-Usage:
-  py -3 tools/benchmark_torchscript_models.py \
-    --model-spec app/src/main/assets/models/building_unet_efficientnetb0_v1/model_spec.json \
-    --model-spec app/src/main/assets/models/road_unet_efficientnetb0_v1/model_spec.json \
-    --iterations 40 --warmup 10 \
-    --output docs/benchmark_baseline.json
-"""
+"""Benchmark TorchScript segmentation models."""
 
 from __future__ import annotations
 
@@ -63,7 +54,6 @@ def run_one(spec_path: Path, warmup: int, iterations: int) -> BenchRow:
     h = int(spec["input"]["height"])
     w = int(spec["input"]["width"])
 
-    # Resolve "models/xxx.pt" relative to app/src/main/assets/
     assets_root = spec_path.parent.parent.parent
     model_path = assets_root / asset_rel
     if not model_path.exists():

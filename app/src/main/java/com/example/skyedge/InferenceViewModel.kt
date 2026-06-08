@@ -11,6 +11,7 @@ import com.example.skyedge.domain.InspectionResult
 import com.example.skyedge.integration.SkyEdgeImageAnalyser
 import com.example.skyedge.model.ImagePreprocessor
 import com.example.skyedge.model.InferenceEngine
+import com.example.skyedge.model.ModelLoader
 import com.example.skyedge.model.PytorchInferenceEngine
 import imgrecord.ImageRecordRepository
 import imgrecord.model.AnalyseStatus
@@ -79,6 +80,7 @@ class InferenceViewModel(application: Application) : AndroidViewModel(applicatio
     val modelChoices: List<ModelChoice> = ModelChoice.ALL
 
     init {
+        ModelLoader.clearModelCache(application.filesDir)
         loadModel()
         refreshHistory()
     }

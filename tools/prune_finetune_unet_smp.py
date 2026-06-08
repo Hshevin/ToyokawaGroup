@@ -1,13 +1,5 @@
 #!/usr/bin/env python3
-"""
-Structured prune + quick fine-tune for SMP UNet(EfficientNet-B0).
-
-Expected data layout:
-  <images_dir>/
-    xxx.jpg/png/...
-  <masks_dir>/
-    xxx.png (same stem as image, binary mask: 0 background, >0 foreground)
-"""
+"""Structured prune and fine-tune for SMP UNet."""
 
 from __future__ import annotations
 
@@ -155,8 +147,6 @@ def prune_model(model: nn.Module, h: int, w: int, shallow: float, mid: float, de
 
 
 def freeze_stable_parts(model: nn.Module) -> None:
-    # Skip connections are graph topology, not a standalone parameter tensor.
-    # We freeze stem/head + early encoder as conservative approximation.
     frozen_prefixes = ("encoder._conv_stem", "encoder._bn0", "encoder._blocks.0", "encoder._blocks.1")
     for name, p in model.named_parameters():
         if name.startswith(frozen_prefixes):

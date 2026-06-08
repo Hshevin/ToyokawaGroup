@@ -1,6 +1,16 @@
 ﻿{
   "model_id": "building_unet_efficientnetb0_v1",
-  "asset_file": "optimized/building_unet_efficientnetb0_v1_pruned_ft_s2.pt",
+  "asset_file": "optimized/building_unet_efficientnetb0_v1_pruned_fp8.fp8pkg",
+  "optimization": {
+    "prune": "structured_s2_0.08_0.15_0.25",
+    "quantization": "fp8_e4m3fn_per_tensor_skip_decoder"
+  },
+  "quantization": {
+    "method": "fp8_e4m3fn_weight_only",
+    "granularity": "per_tensor",
+    "runtime_asset": "optimized/building_unet_efficientnetb0_v1_pruned_fp8_runtime.pt",
+    "packed_size_mb": 2.38
+  },
   "task_type": "segmentation",
   "target": "building",
   "input": {
