@@ -9,7 +9,7 @@
 | **UI** | **前端** | `skyedge-ui` Compose 界面 |
 | 本地数据 |  | `imgrecord` Room 组件 |
 
-架构细节见 [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)；接口契约见 [`openapi/api.yaml`](openapi/api.yaml)。
+架构细节见 [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)；未来功能规划见 [`docs/TODO.md`](docs/TODO.md)；接口契约见 [`openapi/api.yaml`](openapi/api.yaml)。
 
 ---
 

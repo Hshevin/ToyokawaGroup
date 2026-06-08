@@ -27,6 +27,8 @@ keystore/
 # FP8 tune intermediates
 /tools/out/
 
+/app/release
+
 # Python
 __pycache__/
 *.pyc
