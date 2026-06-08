@@ -13,7 +13,10 @@ object ImagePreprocessor {
     fun loadOrientedBitmap(context: Context, uri: Uri): Bitmap? {
         val decoded = context.contentResolver.openInputStream(uri)?.use { stream ->
             BitmapFactory.decodeStream(stream)
-        } ?: return null
+        } ?: run {
+            val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: return null
+            TiffBitmapLoader.decode(bytes) ?: return null
+        }
 
         val rotation = context.contentResolver.openInputStream(uri)?.use { stream ->
             val exif = ExifInterface(stream)

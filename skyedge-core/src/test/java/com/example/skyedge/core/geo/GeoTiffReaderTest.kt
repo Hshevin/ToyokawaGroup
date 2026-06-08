@@ -1,7 +1,9 @@
 package com.example.skyedge.core.geo
 
 import android.graphics.Color
+import java.io.File
 import org.junit.Assert.assertEquals
+import org.junit.Assume.assumeTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -10,6 +12,19 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [28])
 class GeoTiffReaderTest {
+    @Test
+    fun decode_readsLzwCompressedSpaceNetSample() {
+        val sample = File("../../test_img/building/SN2_buildings_train_AOI_2_Vegas_RGB_img1.tif")
+        assumeTrue("需要 test_img 样本", sample.exists())
+
+        val result = GeoTiffReader.decode(sample.readBytes(), maxEdge = 2048)
+
+        assertEquals(163, result.previewBitmap.width)
+        assertEquals(163, result.previewBitmap.height)
+        assertEquals("EPSG:4326", result.metadata.crs)
+        assertEquals(Color.rgb(0, 0, 0), result.previewBitmap.getPixel(0, 0))
+    }
+
     @Test
     fun decode_readsRgbPreviewAndGeoBounds() {
         val result = GeoTiffReader.decode(minimalGeoTiff(), maxEdge = 2048)
