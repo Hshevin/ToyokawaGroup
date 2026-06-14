@@ -7,7 +7,7 @@ info:
     **与端侧现有模型对齐**
     - `AnalysisJob` 字段映射 Android `imgrecord.ImageRecord`（`local_url` ↔ `storagePath`）
     - `summary` 对齐端侧 `summary_json`（分割任务含 `defect_area_ratio`、`mask_path` 等）
-    - `analyseType`：`building` / `road` 对应 `AnalyseType.BUILDING` / `ROAD`
+    - `analyseType`：`building` 对应 `AnalyseType.BUILDING`
 
     **端侧模块契约（进程内，非 HTTP）**
     - UI 模块 `skyedge-ui` 通过 `InspectionFacade`（`skyedge-core`）调用推理与 Room，不直连 PyTorch

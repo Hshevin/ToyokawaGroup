@@ -1,0 +1,59 @@
+{
+  "model_id": "mobile_sam_interactive_v1",
+  "model_name": "MobileSAM",
+  "task_type": "interactive_segmentation",
+  "encoder_asset": "models/mobile_sam_interactive_v1/mobile_sam_encoder_fp8.fp8pkg",
+  "decoder_asset": "models/mobile_sam_interactive_v1/mobile_sam_decoder_fp8.fp8pkg",
+  "encoder_size": 1024,
+  "optimization": {
+    "quantization": "fp8_e4m3fn_per_tensor"
+  },
+  "quantization": {
+    "method": "fp8_e4m3fn_weight_only",
+    "granularity": "per_tensor",
+    "encoder_runtime_asset": "models/mobile_sam_interactive_v1/mobile_sam_encoder_fp8_runtime.pt",
+    "decoder_runtime_asset": "models/mobile_sam_interactive_v1/mobile_sam_decoder_fp8_runtime.pt",
+    "packed_size_mb": 9.61
+  },
+  "input": {
+    "layout": "NCHW",
+    "height": 1024,
+    "width": 1024,
+    "range": "0.0-1.0",
+    "mean": [
+      0.485,
+      0.456,
+      0.406
+    ],
+    "std": [
+      0.229,
+      0.224,
+      0.225
+    ],
+    "sam_mean_rgb_0_1": [
+      0.4849549,
+      0.45607844,
+      0.40588236
+    ],
+    "sam_std_rgb_0_1": [
+      0.229,
+      0.224,
+      0.225
+    ],
+    "dtype": "float32"
+  },
+  "output": {
+    "type": "binary_mask",
+    "postprocess": "threshold",
+    "threshold": 0.0
+  },
+  "num_classes": 2,
+  "class_names": [
+    "background",
+    "foreground"
+  ],
+  "demo_assets": {
+    "points_json": "models/mobile_sam_interactive_v1/demo/demo_points.json",
+    "building_image": "models/mobile_sam_interactive_v1/demo/building_demo_image.png"
+  }
+}

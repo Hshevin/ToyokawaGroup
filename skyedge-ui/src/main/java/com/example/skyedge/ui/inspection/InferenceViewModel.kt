@@ -47,6 +47,38 @@ class InferenceViewModel @JvmOverloads constructor(
         }
     }
 
+    fun encodeInteractiveImage(uri: Uri) {
+        viewModelScope.launch {
+            facade.encodeInteractiveImage(uri)
+        }
+    }
+
+    fun inferInteractivePoint(x: Float, y: Float, imageWidth: Int, imageHeight: Int) {
+        viewModelScope.launch {
+            facade.inferInteractivePoint(x, y, imageWidth, imageHeight)
+        }
+    }
+
+    fun runMobileSamDemo(demoName: String = "building_demo") {
+        viewModelScope.launch {
+            facade.runMobileSamDemo(demoName)
+        }
+    }
+
+    fun selectCorrectionRoi(
+        uri: Uri,
+        x1: Float,
+        y1: Float,
+        x2: Float,
+        y2: Float,
+        imageWidth: Int,
+        imageHeight: Int,
+    ) {
+        viewModelScope.launch {
+            facade.selectCorrectionRoi(uri, x1, y1, x2, y2, imageWidth, imageHeight)
+        }
+    }
+
     fun loadGeoTiff(uri: Uri) {
         viewModelScope.launch {
             facade.loadGeoTiff(uri)

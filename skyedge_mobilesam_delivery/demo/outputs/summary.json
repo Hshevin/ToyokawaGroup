@@ -1,0 +1,44 @@
+[
+  {
+    "name": "building_demo",
+    "image": "data\\whu_building_subset\\test\\images\\test_0007.png",
+    "positive_points": [
+      [
+        99,
+        14
+      ]
+    ],
+    "negative_points": [],
+    "box": [
+      23,
+      0,
+      164,
+      63
+    ],
+    "crop_to_box": true,
+    "best_score": 0.9737774133682251,
+    "best_mask": "outputs\\mobile_sam_point_demo_final\\building_demo_mobile_sam_mask.png",
+    "comparison": "outputs\\mobile_sam_point_demo_final\\building_demo_comparison.png"
+  },
+  {
+    "name": "road_demo",
+    "image": "data\\open_earth_map_road_area_500\\test\\images\\test_0011.png",
+    "positive_points": [
+      [
+        792,
+        536
+      ]
+    ],
+    "negative_points": [],
+    "box": [
+      701,
+      404,
+      883,
+      663
+    ],
+    "crop_to_box": true,
+    "best_score": 0.9330847263336182,
+    "best_mask": "outputs\\mobile_sam_point_demo_final\\road_demo_mobile_sam_mask.png",
+    "comparison": "outputs\\mobile_sam_point_demo_final\\road_demo_comparison.png"
+  }
+]

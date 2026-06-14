@@ -113,6 +113,9 @@ class PytorchInferenceEngine(
                 elapsedMs,
                 version,
             )
+            TaskType.INTERACTIVE_SEGMENTATION -> InspectionResult.Error(
+                "交互式分割请使用 MobileSamInferenceEngine",
+            )
         }
     }
 }

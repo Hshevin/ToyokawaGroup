@@ -5,7 +5,6 @@ Benchmark TorchScript segmentation models delivered for SkyEdge.
 Usage:
   py -3 tools/benchmark_torchscript_models.py \
     --model-spec skyedge-core/src/main/assets/models/building_unet_efficientnetb0_v1/model_spec.json \
-    --model-spec skyedge-core/src/main/assets/models/road_unet_efficientnetb0_v1/model_spec.json \
     --iterations 40 --warmup 10 \
     --output docs/benchmark_baseline.json
 """

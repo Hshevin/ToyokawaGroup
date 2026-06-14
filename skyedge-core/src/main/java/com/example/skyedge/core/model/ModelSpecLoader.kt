@@ -6,12 +6,15 @@ import org.json.JSONObject
 enum class TaskType {
     CLASSIFICATION,
     SEGMENTATION,
+    INTERACTIVE_SEGMENTATION,
 }
 
 data class LoadedModelSpec(
     val modelId: String,
     val assetFile: String?,
+    val decoderAssetFile: String?,
     val quantizationRuntimeAsset: String?,
+    val decoderQuantizationRuntimeAsset: String?,
     val taskType: TaskType,
     val inputHeight: Int,
     val inputWidth: Int,
@@ -50,29 +53,61 @@ object ModelSpecLoader {
 
         val task = when (json.optString("task_type", "segmentation").lowercase()) {
             "classification" -> TaskType.CLASSIFICATION
+            "interactive_segmentation" -> TaskType.INTERACTIVE_SEGMENTATION
             else -> TaskType.SEGMENTATION
         }
 
-        return LoadedModelSpec(
-            modelId = json.getString("model_id"),
-            assetFile = json.optString("asset_file").takeIf { it.isNotEmpty() },
-            quantizationRuntimeAsset = json.optJSONObject("quantization")
-                ?.optString("runtime_asset")
-                ?.takeIf { it.isNotEmpty() },
-            taskType = task,
-            inputHeight = input.getInt("height"),
-            inputWidth = input.getInt("width"),
-            meanRgb = floatArrayOf(
+        val samMean = input.optJSONArray("sam_mean_rgb_0_1")
+        val samStd = input.optJSONArray("sam_std_rgb_0_1")
+        val meanRgb = if (task == TaskType.INTERACTIVE_SEGMENTATION && samMean != null) {
+            floatArrayOf(
+                samMean.getDouble(0).toFloat(),
+                samMean.getDouble(1).toFloat(),
+                samMean.getDouble(2).toFloat(),
+            )
+        } else {
+            floatArrayOf(
                 mean.getDouble(0).toFloat(),
                 mean.getDouble(1).toFloat(),
                 mean.getDouble(2).toFloat(),
-            ),
-            stdRgb = floatArrayOf(
+            )
+        }
+        val stdRgb = if (task == TaskType.INTERACTIVE_SEGMENTATION && samStd != null) {
+            floatArrayOf(
+                samStd.getDouble(0).toFloat(),
+                samStd.getDouble(1).toFloat(),
+                samStd.getDouble(2).toFloat(),
+            )
+        } else {
+            floatArrayOf(
                 std.getDouble(0).toFloat(),
                 std.getDouble(1).toFloat(),
                 std.getDouble(2).toFloat(),
-            ),
-            numClasses = json.getInt("num_classes"),
+            )
+        }
+
+        val assetFile = json.optString("asset_file").takeIf { it.isNotEmpty() }
+            ?: json.optString("encoder_asset").takeIf { it.isNotEmpty() }
+
+        return LoadedModelSpec(
+            modelId = json.getString("model_id"),
+            assetFile = assetFile,
+            decoderAssetFile = json.optString("decoder_asset").takeIf { it.isNotEmpty() },
+            quantizationRuntimeAsset = json.optJSONObject("quantization")
+                ?.optString("runtime_asset")
+                ?.takeIf { it.isNotEmpty() }
+                ?: json.optJSONObject("quantization")
+                    ?.optString("encoder_runtime_asset")
+                    ?.takeIf { it.isNotEmpty() },
+            decoderQuantizationRuntimeAsset = json.optJSONObject("quantization")
+                ?.optString("decoder_runtime_asset")
+                ?.takeIf { it.isNotEmpty() },
+            taskType = task,
+            inputHeight = input.optInt("height", json.optInt("encoder_size", ModelSpec.INPUT_HEIGHT)),
+            inputWidth = input.optInt("width", json.optInt("encoder_size", ModelSpec.INPUT_WIDTH)),
+            meanRgb = meanRgb,
+            stdRgb = stdRgb,
+            numClasses = json.optInt("num_classes", 2),
             postprocess = output.getString("postprocess"),
             threshold = if (output.isNull("threshold")) null else output.getDouble("threshold").toFloat(),
             classNames = names,
@@ -82,7 +117,9 @@ object ModelSpecLoader {
     fun defaultSpec(): LoadedModelSpec = LoadedModelSpec(
         modelId = "placeholder_classification",
         assetFile = null,
+        decoderAssetFile = null,
         quantizationRuntimeAsset = null,
+        decoderQuantizationRuntimeAsset = null,
         taskType = TaskType.CLASSIFICATION,
         inputHeight = ModelSpec.INPUT_HEIGHT,
         inputWidth = ModelSpec.INPUT_WIDTH,

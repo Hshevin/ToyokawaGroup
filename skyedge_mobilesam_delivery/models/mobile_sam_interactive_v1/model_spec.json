@@ -1,0 +1,37 @@
+{
+  "model_id": "mobile_sam_interactive_v1",
+  "model_name": "MobileSAM",
+  "task_type": "interactive_segmentation",
+  "project_role": "P2 auxiliary interactive correction",
+  "target": [
+    "building_local_mask_correction",
+    "road_local_mask_correction",
+    "disaster_boundary_auxiliary_correction"
+  ],
+  "asset_file": "models/mobile_sam_interactive_v1/mobile_sam.pt",
+  "framework": "PyTorch",
+  "loader": "kornia.contrib.visual_prompter.VisualPrompter",
+  "pretrained": true,
+  "training_status": "not fine-tuned by this project",
+  "input": {
+    "image": {
+      "layout": "CHW",
+      "channels": 3,
+      "rgb_order": "RGB",
+      "dtype": "float32",
+      "range": "0.0-1.0"
+    },
+    "prompt": {
+      "positive_points": "list of [x, y] image pixel coordinates",
+      "negative_points": "list of [x, y] image pixel coordinates",
+      "box": "optional [x1, y1, x2, y2] ROI box",
+      "crop_to_box": "optional boolean; run on local ROI and paste mask back"
+    }
+  },
+  "output": {
+    "type": "binary_mask",
+    "shape": "same height and width as input or selected ROI",
+    "postprocess": "select mask with highest score, then export 0/255 PNG"
+  },
+  "integration_note": "Use the project's building/road segmentation model first. MobileSAM is used after user click/box input to add, delete, or replace a local mask region."
+}

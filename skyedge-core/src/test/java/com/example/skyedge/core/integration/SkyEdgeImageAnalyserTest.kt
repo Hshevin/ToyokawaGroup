@@ -58,7 +58,7 @@ class SkyEdgeImageAnalyserTest {
                 inferenceMs = 10L,
                 modelVersion = "model.pt",
                 localUrl = dir.absolutePath,
-                analyseType = AnalyseType.ROAD,
+                analyseType = AnalyseType.BUILDING,
             )
 
             val geo = JSONObject(json).getJSONObject("geo")
