@@ -55,6 +55,44 @@ class FakeInspectionFacade(
         )
     }
 
+    override suspend fun encodeInteractiveImage(uri: Uri) {
+        _state.value = _state.value.copy(
+            isInferring = false,
+            interactiveImageReady = true,
+            statusMessage = "MobileSAM 编码完成（Fake）",
+        )
+    }
+
+    override suspend fun inferInteractivePoint(x: Float, y: Float, imageWidth: Int, imageHeight: Int) {
+        _state.value = _state.value.copy(
+            isInferring = false,
+            statusMessage = "MobileSAM 点击分割完成（Fake）",
+        )
+    }
+
+    override suspend fun runMobileSamDemo(demoName: String) {
+        _state.value = _state.value.copy(
+            isInferring = false,
+            interactiveImageReady = true,
+            statusMessage = "MobileSAM 演示完成（Fake）: $demoName",
+        )
+    }
+
+    override suspend fun selectCorrectionRoi(
+        uri: Uri,
+        x1: Float,
+        y1: Float,
+        x2: Float,
+        y2: Float,
+        imageWidth: Int,
+        imageHeight: Int,
+    ) {
+        _state.value = _state.value.copy(
+            statusMessage = "框选 ROI 已更新（Fake）",
+            interactiveRoiActive = true,
+        )
+    }
+
     override suspend fun loadGeoTiff(uri: Uri) {
         _state.value = _state.value.copy(
             statusMessage = "GeoTIFF 已加载（Fake）\nuri: $uri",

@@ -7,7 +7,7 @@ import java.io.File
 import java.io.FileOutputStream
 
 object MaskOverlayRenderer {
-    private const val DEFAULT_ALPHA = 0.42f
+    private const val DEFAULT_ALPHA = 0.55f
 
     fun renderMaskFile(
         maskPath: String,
@@ -80,8 +80,5 @@ object MaskOverlayRenderer {
     }
 
     private fun overlayColor(modelKey: String, alpha: Int): Int =
-        when (modelKey.lowercase()) {
-            "road" -> Color.argb(alpha, 0, 120, 255)
-            else -> Color.argb(alpha, 255, 140, 0)
-        }
+        Color.argb(alpha, 255, 48, 48)
 }

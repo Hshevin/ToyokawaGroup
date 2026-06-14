@@ -100,6 +100,7 @@ mask_overlay.png
 │   ├── MODEL_DELIVERY_CHECKLIST.md
 │   └── MODEL_OPTIMIZATION_DELIVERY_REPORT.md
 ├── tools/                             # 优化与验收脚本（Python）
+├── geotiff_map_test_samples/          # 地图 GeoTIFF 测试样例（不进 APK）
 ├── skyedge_vm_test_images/
 └── README.md
 ```
@@ -135,7 +136,8 @@ mask_overlay.png
 2. 用 Android Studio 打开本仓库根目录
 3. 复制 `local.properties.example` 为 `local.properties`，填入本机 `sdk.dir` 与 `AMAP_API_KEY`
 4. 连接真机（推荐，地图/OpenGL 更稳定）或模拟器，Run `app`
-5. 地图页：点击 **导入 GeoTIFF** → 选择 Building/Road → **开始检测** → 查看卫星底图、正射图与 mask 叠加
+5. 地图页：点击 **导入 GeoTIFF** → 选择 Building/Road → **开始检测** → 查看卫星底图、正射图与 mask 叠加  
+   测试样例见 `geotiff_map_test_samples/rgb_geotiff/`（优先用 RGB 目录，勿用 `source_ms/`）
 6. 检测页：点击选图 → 选择 **Building** 或 **Road** → 查看普通图片叠加结果
 7. 可选：**当前图连跑 10 次** 查看时延统计
 

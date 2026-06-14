@@ -9,9 +9,24 @@ data class InspectionUiState(
     val isInferring: Boolean = false,
     val isModelReady: Boolean = false,
     val lastMaskPath: String? = null,
+    /** Building 首次检测的 mask，局部修正始终与之合并，避免被 SAM 小片覆盖。 */
+    val buildingMaskPath: String? = null,
+    /** 每次 mask 文件更新 +1，用于强制刷新右侧 overlay（同路径覆写时 path 不变）。 */
+    val maskUpdateSeq: Long = 0L,
     val selectedModelKey: String = ModelChoice.BUILDING.key,
+    val interactiveImageReady: Boolean = false,
+    val interactiveImageWidth: Int? = null,
+    val interactiveImageHeight: Int? = null,
+    val interactiveRoiActive: Boolean = false,
+    val interactivePoints: List<InteractivePoint> = emptyList(),
     val recentRecords: List<InspectionRecordItem> = emptyList(),
     val mapSession: MapSessionUiModel? = null,
+)
+
+data class InteractivePoint(
+    val x: Float,
+    val y: Float,
+    val label: Int = 1,
 )
 
 data class GeoLatLngDto(
@@ -54,13 +69,14 @@ data class ModelChoice(
             label = "Building",
             specAsset = "models/building_unet_efficientnetb0_v1/model_spec.json",
         )
-        val ROAD = ModelChoice(
-            key = "road",
-            label = "Road",
-            specAsset = "models/road_unet_efficientnetb0_v1/model_spec.json",
+        val MOBILE_SAM = ModelChoice(
+            key = "mobile_sam",
+            label = "MobileSAM",
+            specAsset = "models/mobile_sam_interactive_v1/model_spec.json",
         )
 
-        val ALL = listOf(BUILDING, ROAD)
+        /** 检测页可见模型；MobileSAM 作为 Building 检测后的修正引擎，不在 UI 切换。 */
+        val ALL = listOf(BUILDING)
 
         fun fromKey(key: String): ModelChoice = ALL.firstOrNull { it.key == key } ?: BUILDING
     }
@@ -74,6 +90,18 @@ interface InspectionFacade {
     fun switchModel(modelKey: String)
     fun updateStatus(message: String)
     suspend fun infer(uri: Uri)
+    suspend fun encodeInteractiveImage(uri: Uri)
+    suspend fun inferInteractivePoint(x: Float, y: Float, imageWidth: Int, imageHeight: Int)
+    suspend fun selectCorrectionRoi(
+        uri: Uri,
+        x1: Float,
+        y1: Float,
+        x2: Float,
+        y2: Float,
+        imageWidth: Int,
+        imageHeight: Int,
+    )
+    suspend fun runMobileSamDemo(demoName: String = "building_demo")
     suspend fun loadGeoTiff(uri: Uri)
     suspend fun inferMapSession()
     fun setMapLayerVisibility(showOrtho: Boolean, showMask: Boolean)

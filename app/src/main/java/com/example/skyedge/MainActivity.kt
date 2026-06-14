@@ -94,9 +94,6 @@ class MainActivity : ComponentActivity() {
                                 galleryLauncher.launch("image/*")
                             }
                         },
-                        onBenchmark = {
-                            selectedImageUri?.let { viewModel.benchmarkCurrentImage(it, runs = 10) }
-                        },
                     )
                 }
             }

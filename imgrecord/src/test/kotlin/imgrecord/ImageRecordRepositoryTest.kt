@@ -92,8 +92,8 @@ class ImageRecordRepositoryTest : DatabaseTest() {
         val repo = createRepo(prefix = tempRoot + "/dup")
         val imgUrl = "https://example.com/same.jpg"
 
-        val first = repo.insert(imgUrl, AnalyseType.ROAD)
-        val second = repo.insert(imgUrl, AnalyseType.ROAD)
+        val first = repo.insert(imgUrl, AnalyseType.BUILDING)
+        val second = repo.insert(imgUrl, AnalyseType.BUILDING)
 
         assertNotEquals(first, second)
         assertEquals(2, repo.traverse().size)
@@ -121,7 +121,7 @@ class ImageRecordRepositoryTest : DatabaseTest() {
     fun analyseAndUpdate_failedResult_persistsErrInfo() = runTest {
         val analyser = FakeImageAnalyser.failed(errInfo = "model error", time = 5678L)
         val repo = createRepo(prefix = tempRoot + "/failed", analyser = analyser)
-        val localUrl = repo.insert("https://example.com/a.jpg", AnalyseType.ROAD)
+        val localUrl = repo.insert("https://example.com/a.jpg", AnalyseType.BUILDING)
         advanceUntilIdle()
 
         val record = repo.queryByLocalUrl(localUrl)!!
@@ -194,7 +194,7 @@ class ImageRecordRepositoryTest : DatabaseTest() {
 
         val newPrefix = tempRoot + "/second"
         repo.setLocalUrlPrefix(newPrefix)
-        val second = repo.insert("https://example.com/b.jpg", AnalyseType.ROAD)
+        val second = repo.insert("https://example.com/b.jpg", AnalyseType.BUILDING)
 
         assertTrue(first.startsWith(tempRoot + "/first"))
         assertTrue(second.startsWith(newPrefix))
@@ -224,7 +224,7 @@ class ImageRecordRepositoryTest : DatabaseTest() {
         val failRepo = createRepo(prefix = tempRoot + "/status-f", analyser = failAnalyser)
 
         val pendingUrl = pendingRepo.insert("https://example.com/p.jpg", AnalyseType.BUILDING)
-        failRepo.insert("https://example.com/f.jpg", AnalyseType.ROAD)
+        failRepo.insert("https://example.com/f.jpg", AnalyseType.BUILDING)
         advanceUntilIdle()
 
         assertEquals(1, pendingRepo.queryByStatus(AnalyseStatus.DONE).size)
@@ -239,7 +239,7 @@ class ImageRecordRepositoryTest : DatabaseTest() {
     fun traverse_returnsAllRecords() = runTest {
         val repo = createRepo(prefix = tempRoot + "/traverse")
         repo.insert("https://example.com/1.jpg", AnalyseType.BUILDING)
-        repo.insert("https://example.com/2.jpg", AnalyseType.ROAD)
+        repo.insert("https://example.com/2.jpg", AnalyseType.BUILDING)
 
         assertEquals(2, repo.traverse().size)
     }
@@ -296,7 +296,7 @@ class ImageRecordRepositoryTest : DatabaseTest() {
     fun deleteAll_clearsAllRecords() = runTest {
         val repo = createRepo(prefix = tempRoot + "/delete-all")
         repo.insert("https://example.com/1.jpg", AnalyseType.BUILDING)
-        repo.insert("https://example.com/2.jpg", AnalyseType.ROAD)
+        repo.insert("https://example.com/2.jpg", AnalyseType.BUILDING)
 
         assertEquals(2, repo.deleteAll())
         assertTrue(repo.traverse().isEmpty())

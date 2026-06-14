@@ -1,0 +1,44 @@
+[
+  {
+    "name": "building_demo",
+    "image": "demo\\test_images\\building\\building_demo_image.png",
+    "positive_points": [
+      [
+        99,
+        14
+      ]
+    ],
+    "negative_points": [],
+    "box": [
+      23,
+      0,
+      164,
+      63
+    ],
+    "crop_to_box": true,
+    "best_score": 0.9737774133682251,
+    "best_mask": "demo\\run_outputs\\building_demo_mobile_sam_mask.png",
+    "comparison": "demo\\run_outputs\\building_demo_comparison.png"
+  },
+  {
+    "name": "road_demo",
+    "image": "demo\\test_images\\road\\road_demo_image.png",
+    "positive_points": [
+      [
+        792,
+        536
+      ]
+    ],
+    "negative_points": [],
+    "box": [
+      701,
+      404,
+      883,
+      663
+    ],
+    "crop_to_box": true,
+    "best_score": 0.9330847263336182,
+    "best_mask": "demo\\run_outputs\\road_demo_mobile_sam_mask.png",
+    "comparison": "demo\\run_outputs\\road_demo_comparison.png"
+  }
+]
