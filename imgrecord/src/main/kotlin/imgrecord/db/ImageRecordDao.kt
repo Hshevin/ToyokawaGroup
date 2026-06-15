@@ -24,6 +24,9 @@ interface ImageRecordDao {
     @Query("SELECT * FROM image_record WHERE status = :status")
     suspend fun getByStatus(status: Int): List<ImageRecordEntity>
 
+    @Query("SELECT * FROM image_record WHERE task_id = :taskId")
+    suspend fun getByTaskId(taskId: String): List<ImageRecordEntity>
+
     @Query("DELETE FROM image_record WHERE local_url = :localUrl")
     suspend fun deleteByLocalUrl(localUrl: String): Int
 

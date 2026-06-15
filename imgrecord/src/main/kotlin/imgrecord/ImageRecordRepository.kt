@@ -18,6 +18,7 @@ class ImageRecordRepository(
     localUrlPrefix: String,
     private val analyser: ImageAnalyser,
     private val scope: CoroutineScope,
+    private val autoAnalyse: Boolean = true,
 ) {
 
     @Volatile
@@ -28,11 +29,13 @@ class ImageRecordRepository(
         localUrlPrefix: String,
         analyser: ImageAnalyser,
         scope: CoroutineScope,
+        autoAnalyse: Boolean = true,
     ) : this(
         dao = ImageRecordDatabase.create(context).imageRecordDao(),
         localUrlPrefix = localUrlPrefix,
         analyser = analyser,
         scope = scope,
+        autoAnalyse = autoAnalyse,
     )
 
     fun getLocalUrlPrefix(): String = localUrlPrefix
@@ -42,12 +45,17 @@ class ImageRecordRepository(
         localUrlPrefix = prefix
     }
 
-    suspend fun insert(imgUrl: String, analyseType: AnalyseType): String {
+    suspend fun insert(imgUrl: String, analyseType: AnalyseType, taskId: String? = null): String {
         val localUrl = generateLocalUrl(requireLocalUrlPrefix())
-        return insertAt(localUrl, imgUrl, analyseType)
+        return insertAt(localUrl, imgUrl, analyseType, taskId)
     }
 
-    suspend fun insertAt(localUrl: String, imgUrl: String, analyseType: AnalyseType): String {
+    suspend fun insertAt(
+        localUrl: String,
+        imgUrl: String,
+        analyseType: AnalyseType,
+        taskId: String? = null,
+    ): String {
         File(localUrl).mkdirs()
         val now = System.currentTimeMillis()
         dao.insert(
@@ -59,9 +67,12 @@ class ImageRecordRepository(
                 time = now,
                 summaryJson = "",
                 errInfo = null,
+                taskId = taskId,
             ),
         )
-        scope.launch { analyseAndUpdate(localUrl) }
+        if (autoAnalyse) {
+            scope.launch { analyseAndUpdate(localUrl) }
+        }
         return localUrl
     }
 
@@ -88,6 +99,9 @@ class ImageRecordRepository(
 
     suspend fun queryByStatus(status: AnalyseStatus): List<ImageRecord> =
         dao.getByStatus(status.value).map { it.toModel() }
+
+    suspend fun queryByTaskId(taskId: String): List<ImageRecord> =
+        dao.getByTaskId(taskId).map { it.toModel() }
 
     suspend fun traverse(): List<ImageRecord> =
         dao.getAll().map { it.toModel() }
@@ -129,4 +143,5 @@ private fun ImageRecordEntity.toModel(): ImageRecord =
         time = time,
         summaryJson = summaryJson,
         errInfo = errInfo,
+        taskId = taskId,
     )

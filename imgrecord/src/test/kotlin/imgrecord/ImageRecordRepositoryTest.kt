@@ -9,7 +9,7 @@ import imgrecord.testutil.FakeImageAnalyser
 import imgrecord.testutil.createRepository
 import java.io.File
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -24,7 +24,7 @@ import org.robolectric.RobolectricTestRunner
 @RunWith(RobolectricTestRunner::class)
 class ImageRecordRepositoryTest : DatabaseTest() {
 
-    private val tempRoot = System.getProperty("java.io.tmpdir") + "/imgrecord-test"
+    private val tempRoot = File(System.getProperty("java.io.tmpdir") ?: "/tmp", "imgrecord-test").absolutePath
 
     @Test
     fun generateLocalUrl_usesPrefixAndEndsWithSeparator() {
@@ -106,7 +106,7 @@ class ImageRecordRepositoryTest : DatabaseTest() {
         val repo = createRepo(prefix = tempRoot + "/bg-done", analyser = analyser)
 
         val localUrl = repo.insert("https://example.com/a.jpg", AnalyseType.BUILDING)
-        advanceUntilIdle()
+        repo.analyseAndUpdate(localUrl)
 
         val record = repo.queryByLocalUrl(localUrl)!!
         assertEquals(AnalyseStatus.DONE, record.status)
@@ -122,7 +122,7 @@ class ImageRecordRepositoryTest : DatabaseTest() {
         val analyser = FakeImageAnalyser.failed(errInfo = "model error", time = 5678L)
         val repo = createRepo(prefix = tempRoot + "/failed", analyser = analyser)
         val localUrl = repo.insert("https://example.com/a.jpg", AnalyseType.BUILDING)
-        advanceUntilIdle()
+        repo.analyseAndUpdate(localUrl)
 
         val record = repo.queryByLocalUrl(localUrl)!!
         assertEquals(AnalyseStatus.FAILED, record.status)
@@ -136,7 +136,7 @@ class ImageRecordRepositoryTest : DatabaseTest() {
         val analyser = FakeImageAnalyser.throwing(IllegalStateException("network down"))
         val repo = createRepo(prefix = tempRoot + "/throw", analyser = analyser)
         val localUrl = repo.insert("https://example.com/a.jpg", AnalyseType.BUILDING)
-        advanceUntilIdle()
+        repo.analyseAndUpdate(localUrl)
 
         val record = repo.queryByLocalUrl(localUrl)!!
         assertEquals(AnalyseStatus.FAILED, record.status)
@@ -176,7 +176,7 @@ class ImageRecordRepositoryTest : DatabaseTest() {
         }
         val repo = createRepo(prefix = tempRoot + "/retry", analyser = analyser)
         val localUrl = repo.insert("https://example.com/a.jpg", AnalyseType.BUILDING)
-        advanceUntilIdle()
+        repo.analyseAndUpdate(localUrl)
 
         assertEquals(AnalyseStatus.FAILED, repo.queryByLocalUrl(localUrl)!!.status)
 
@@ -224,8 +224,9 @@ class ImageRecordRepositoryTest : DatabaseTest() {
         val failRepo = createRepo(prefix = tempRoot + "/status-f", analyser = failAnalyser)
 
         val pendingUrl = pendingRepo.insert("https://example.com/p.jpg", AnalyseType.BUILDING)
-        failRepo.insert("https://example.com/f.jpg", AnalyseType.BUILDING)
-        advanceUntilIdle()
+        val failedUrl = failRepo.insert("https://example.com/f.jpg", AnalyseType.BUILDING)
+        pendingRepo.analyseAndUpdate(pendingUrl)
+        failRepo.analyseAndUpdate(failedUrl)
 
         assertEquals(1, pendingRepo.queryByStatus(AnalyseStatus.DONE).size)
         assertEquals(1, failRepo.queryByStatus(AnalyseStatus.FAILED).size)
@@ -264,7 +265,7 @@ class ImageRecordRepositoryTest : DatabaseTest() {
         val analyser = FakeImageAnalyser.throwing(RuntimeException())
         val repo = createRepo(prefix = tempRoot + "/throw-null-msg", analyser = analyser)
         val localUrl = repo.insert("https://example.com/a.jpg", AnalyseType.BUILDING)
-        advanceUntilIdle()
+        repo.analyseAndUpdate(localUrl)
 
         val record = repo.queryByLocalUrl(localUrl)!!
         assertEquals(AnalyseStatus.FAILED, record.status)
@@ -302,13 +303,15 @@ class ImageRecordRepositoryTest : DatabaseTest() {
         assertTrue(repo.traverse().isEmpty())
     }
 
-    private fun createRepo(
+    private fun TestScope.createRepo(
         prefix: String,
         analyser: FakeImageAnalyser = FakeImageAnalyser.success(),
+        autoAnalyse: Boolean = false,
     ): ImageRecordRepository = createRepository(
         dao = dao,
         prefix = prefix,
         analyser = analyser,
-        scope = CoroutineScope(coroutineContext),
+        scope = this,
+        autoAnalyse = autoAnalyse,
     )
 }

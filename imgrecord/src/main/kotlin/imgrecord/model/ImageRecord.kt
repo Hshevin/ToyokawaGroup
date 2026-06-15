@@ -8,4 +8,5 @@ data class ImageRecord(
     val time: Long,
     val summaryJson: String,
     val errInfo: String?,
+    val taskId: String? = null,
 )

@@ -7,6 +7,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.viewinterop.AndroidView
@@ -20,9 +21,11 @@ import com.example.skyedge.core.api.MapSessionUiModel
 @Composable
 fun AMapCompose(
     mapSession: MapSessionUiModel?,
+    onMapClick: ((Double, Double) -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     val lifecycleOwner = LocalLifecycleOwner.current
+    val latestOnMapClick = rememberUpdatedState(onMapClick)
     val savedState = remember { Bundle() }
     var mapView by remember { mutableStateOf<TextureMapView?>(null) }
     var overlayManager by remember { mutableStateOf<MapOverlayManager?>(null) }
@@ -36,6 +39,9 @@ fun AMapCompose(
                 map.mapType = AMap.MAP_TYPE_SATELLITE
                 map.uiSettings.isZoomControlsEnabled = true
                 map.uiSettings.isMyLocationButtonEnabled = false
+                map.setOnMapClickListener { latLng ->
+                    latestOnMapClick.value?.invoke(latLng.latitude, latLng.longitude)
+                }
                 mapView = view
                 overlayManager = MapOverlayManager(map)
             }

@@ -1,6 +1,10 @@
 package com.example.skyedge.core.impl
 
 import android.net.Uri
+import com.example.skyedge.core.api.AnomalyUpdateRequest
+import com.example.skyedge.core.api.AnomalyUiModel
+import com.example.skyedge.core.api.CreateTaskRequest
+import com.example.skyedge.core.api.DisasterPointUiModel
 import com.example.skyedge.core.api.GeoBoundsDto
 import com.example.skyedge.core.api.GeoLatLngDto
 import com.example.skyedge.core.api.InspectionFacade
@@ -8,6 +12,11 @@ import com.example.skyedge.core.api.InspectionRecordItem
 import com.example.skyedge.core.api.InspectionUiState
 import com.example.skyedge.core.api.MapSessionUiModel
 import com.example.skyedge.core.api.ModelChoice
+import com.example.skyedge.core.api.ReportExportResult
+import com.example.skyedge.core.api.ReportFormat
+import com.example.skyedge.core.api.ReviewAnomalyRequest
+import com.example.skyedge.core.api.SubmitAnomalyRequest
+import com.example.skyedge.core.api.TaskUiModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -23,6 +32,7 @@ class FakeInspectionFacade(
         recentRecords = listOf(
             InspectionRecordItem(
                 localUrl = "/data/analysis/demo/",
+                sourceUri = "file:///data/analysis/demo/source.png",
                 analyseType = "BUILDING",
                 status = "DONE",
                 detail = "占比 12.3%",
@@ -110,6 +120,105 @@ class FakeInspectionFacade(
         )
     }
 
+    override suspend fun createTask(request: CreateTaskRequest): TaskUiModel {
+        val now = System.currentTimeMillis()
+        val task = TaskUiModel(
+            id = "fake-task",
+            name = request.name.ifBlank { request.sceneType.label },
+            sceneType = request.sceneType,
+            areaName = request.areaName,
+            status = com.example.skyedge.core.api.TaskStatusUi.MANUAL_REVIEW,
+            priority = request.priority,
+            operator = request.operator,
+            createdAt = now,
+            updatedAt = now,
+        )
+        _state.value = _state.value.copy(tasks = listOf(task), activeTask = task)
+        return task
+    }
+
+    override suspend fun listTasks(): List<TaskUiModel> = _state.value.tasks
+
+    override suspend fun getTask(taskId: String): TaskUiModel? =
+        _state.value.tasks.firstOrNull { it.id == taskId }
+
+    override fun setActiveTask(taskId: String) {
+        _state.value.tasks.firstOrNull { it.id == taskId }?.let {
+            _state.value = _state.value.copy(activeTask = it)
+        }
+    }
+
+    override suspend fun listAnomalies(taskId: String): List<AnomalyUiModel> =
+        _state.value.anomalies.filter { it.taskId == taskId }
+
+    override suspend fun submitAnomaly(request: SubmitAnomalyRequest): String {
+        _state.value = _state.value.copy(statusMessage = "异常已提交（Fake）")
+        return "fake-anomaly"
+    }
+
+    override suspend fun reviewAnomaly(id: String, request: ReviewAnomalyRequest) {
+        _state.value = _state.value.copy(statusMessage = "异常已复核（Fake）")
+    }
+
+    override suspend fun updateAnomaly(id: String, fields: AnomalyUpdateRequest) {
+        _state.value = _state.value.copy(statusMessage = "异常已更新（Fake）")
+    }
+
+    override suspend fun attachPhoto(anomalyId: String, uri: Uri) {
+        _state.value = _state.value.copy(statusMessage = "照片已绑定（Fake）: $uri")
+    }
+
+    override suspend fun exportReport(taskId: String, formats: Set<ReportFormat>): ReportExportResult {
+        val result = ReportExportResult(
+            taskId = taskId,
+            exportedAt = System.currentTimeMillis(),
+            files = formats.associateWith { "/data/analysis/demo/report.${it.value}" },
+        )
+        _state.value = _state.value.copy(lastReport = result, statusMessage = "报告已导出（Fake）")
+        return result
+    }
+
+    override fun startDisasterTrack() {
+        _state.value = _state.value.copy(disasterTrack = _state.value.disasterTrack.copy(isCollecting = true))
+    }
+
+    override fun addDisasterPoint(lat: Double, lng: Double) {
+        _state.value = _state.value.copy(
+            disasterTrack = _state.value.disasterTrack.copy(
+                points = _state.value.disasterTrack.points + DisasterPointUiModel(lat, lng, System.currentTimeMillis()),
+            ),
+        )
+    }
+
+    override suspend fun captureCurrentLocation() {
+        addDisasterPoint(35.681, 139.767)
+    }
+
+    override fun finishDisasterTrack() {
+        _state.value = _state.value.copy(disasterTrack = _state.value.disasterTrack.copy(isCollecting = false, isClosed = true))
+    }
+
+    override fun resetDisasterTrack() {
+        _state.value = _state.value.copy(disasterTrack = com.example.skyedge.core.api.DisasterTrackUiModel())
+    }
+
+    override fun setCompareImages(historicalUri: Uri?, currentUri: Uri?) {
+        _state.value = _state.value.copy(
+            compareSession = _state.value.compareSession.copy(
+                historicalImageUri = historicalUri?.toString() ?: _state.value.compareSession.historicalImageUri,
+                currentImageUri = currentUri?.toString() ?: _state.value.compareSession.currentImageUri,
+            ),
+        )
+    }
+
+    override fun setCompareSlider(value: Float) {
+        _state.value = _state.value.copy(compareSession = _state.value.compareSession.copy(slider = value.coerceIn(0f, 1f)))
+    }
+
+    override fun refineMaskAt(x: Float, y: Float) {
+        _state.value = _state.value.copy(statusMessage = "MobileSAM 模型待算法侧交付，已记录点选位置：$x,$y")
+    }
+
     override fun setMapLayerVisibility(showOrtho: Boolean, showMask: Boolean) {
         _state.value = _state.value.copy(
             mapSession = _state.value.mapSession?.copy(
@@ -127,6 +236,10 @@ class FakeInspectionFacade(
 
     override fun clearMapSession() {
         _state.value = _state.value.copy(mapSession = null, statusMessage = "地图会话已清除（Fake）")
+    }
+
+    override fun selectAnomaly(id: String?) {
+        _state.value = _state.value.copy(selectedAnomalyId = id)
     }
 
     override suspend fun benchmark(uri: Uri, runs: Int) {

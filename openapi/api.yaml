@@ -819,14 +819,20 @@ components:
 
     ReviewStatus:
       type: string
-      enum: [pending, confirmed, dismissed]
+      enum: [pending, confirmed, rejected, dismissed]
+      description: 端侧实现使用 rejected 表示已排除；dismissed 保留为外部系统兼容别名
 
     AnomalyType:
       type: string
       enum:
+        - new_building
+        - suspected_illegal
+        - temporary_structure
+        - damaged_collapsed
         - road_damage
         - building_change
         - debris
+        - landslide
         - vegetation
         - other
 
@@ -852,6 +858,12 @@ components:
           maximum: 1
         reviewStatus:
           $ref: "#/components/schemas/ReviewStatus"
+        buildingCode:
+          type: string
+          description: 建筑核查对象编号，例如 B-023
+        source:
+          type: string
+          description: 端侧对象来源，例如 auto_segmentation 或 manual_box
         locationText:
           type: string
         bbox:
@@ -862,6 +874,13 @@ components:
           type: string
           format: uri
           nullable: true
+          description: 端侧可使用 file:// 或本地绝对路径指向建筑缩略图
+        photoUrls:
+          type: array
+          items:
+            type: string
+            format: uri
+          description: 现场照片附件，本地实现可使用 file:// 或本地绝对路径
 
     ReviewAnomalyRequest:
       type: object
@@ -869,13 +888,13 @@ components:
       properties:
         reviewStatus:
           type: string
-          enum: [confirmed, dismissed]
+          enum: [confirmed, rejected, dismissed]
         comment:
           type: string
 
     ReportFormat:
       type: string
-      enum: [image, pdf, json, csv]
+      enum: [image, pdf, json, csv, geojson]
 
     CreateReportRequest:
       type: object
@@ -1060,6 +1079,66 @@ x-inProcessApi:
       summary: 对当前 mapSession 的 preview.png 执行端侧分割推理
       restEquivalent: null
       kotlin: suspend fun inferMapSession()
+    createTask:
+      summary: 创建端侧巡检任务并设为活跃任务
+      restEquivalent: POST /tasks
+      kotlin: suspend fun createTask(request: CreateTaskRequest): TaskUiModel
+    listTasks:
+      summary: 列出本地任务与统计信息
+      restEquivalent: GET /tasks
+      kotlin: suspend fun listTasks(): List<TaskUiModel>
+    getTask:
+      summary: 读取单个本地任务
+      restEquivalent: GET /tasks/{taskId}
+      kotlin: suspend fun getTask(taskId: String): TaskUiModel?
+    setActiveTask:
+      summary: 设置跨 Tab 共用的活跃任务
+      restEquivalent: null
+      kotlin: fun setActiveTask(taskId: String)
+    listAnomalies:
+      summary: 列出任务下异常 / 建筑候选卡片
+      restEquivalent: GET /tasks/{taskId}/anomalies
+      kotlin: suspend fun listAnomalies(taskId: String): List<AnomalyUiModel>
+    submitAnomaly:
+      summary: 端侧提交人工框选异常
+      restEquivalent: POST /tasks/{taskId}/anomalies
+      kotlin: suspend fun submitAnomaly(request: SubmitAnomalyRequest): String
+    reviewAnomaly:
+      summary: 确认或排除异常卡片
+      restEquivalent: POST /tasks/{taskId}/anomalies/{anomalyId}/review
+      kotlin: suspend fun reviewAnomaly(id: String, request: ReviewAnomalyRequest)
+    updateAnomaly:
+      summary: 更新异常字段、人工标签和 bbox
+      restEquivalent: PATCH /tasks/{taskId}/anomalies/{anomalyId}
+      kotlin: suspend fun updateAnomaly(id: String, fields: AnomalyUpdateRequest)
+    attachPhoto:
+      summary: 将现场照片复制到任务目录并绑定异常
+      restEquivalent: null
+      kotlin: suspend fun attachPhoto(anomalyId: String, uri: Uri)
+    exportReport:
+      summary: 端侧导出 image/json/csv/pdf/geojson 报告文件
+      restEquivalent: POST /reports
+      kotlin: suspend fun exportReport(taskId: String, formats: Set<ReportFormat>): ReportExportResult
+    startDisasterTrack:
+      summary: 开始灾害范围 GPS 轨迹采集
+      restEquivalent: null
+      kotlin: fun startDisasterTrack()
+    captureCurrentLocation:
+      summary: 读取当前定位点并追加到灾害轨迹
+      restEquivalent: null
+      kotlin: suspend fun captureCurrentLocation()
+    finishDisasterTrack:
+      summary: 结束轨迹采集并闭合范围
+      restEquivalent: null
+      kotlin: fun finishDisasterTrack()
+    setCompareImages:
+      summary: 设置双时相对比的历史图与本次图
+      restEquivalent: null
+      kotlin: fun setCompareImages(historicalUri: Uri?, currentUri: Uri?)
+    refineMaskAt:
+      summary: MobileSAM 点选入口；模型交付前保留端侧入口与状态提示
+      restEquivalent: null
+      kotlin: fun refineMaskAt(x: Float, y: Float)
     setMapLayerVisibility:
       summary: 切换正射图与 mask GroundOverlay 可见性
       restEquivalent: null

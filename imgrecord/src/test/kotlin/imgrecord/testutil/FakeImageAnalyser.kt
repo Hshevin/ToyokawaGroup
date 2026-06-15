@@ -57,9 +57,11 @@ fun createRepository(
     prefix: String,
     analyser: ImageAnalyser,
     scope: CoroutineScope,
+    autoAnalyse: Boolean = true,
 ) = ImageRecordRepository(
     dao = dao,
     localUrlPrefix = prefix,
     analyser = analyser,
     scope = scope,
+    autoAnalyse = autoAnalyse,
 )

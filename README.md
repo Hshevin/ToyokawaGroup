@@ -6,7 +6,7 @@
 |------|------------|
 | 算法训练与导出 | 交付 `torchscript.pt`、`model_spec.json`、`best_model.pth` |
 | **端侧部署** | `skyedge-core` 推理链路、模型优化、MobileSAM 接入、验收与文档 |
-| **UI** | `skyedge-ui` Compose 界面（检测页 + 地图页） |
+| **UI** | `skyedge-ui` Compose 界面（四 Tab + 地图核查） |
 | 本地数据 | `imgrecord` Room 组件 |
 
 架构细节见 [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)；功能规划见 [`docs/TODO.md`](docs/TODO.md)；接口契约见 [`openapi/api.yaml`](openapi/api.yaml)。
@@ -25,7 +25,13 @@
 - 原图与 **红色半透明 mask** 并排预览，左右两图均支持点选 / 框选
 - 状态栏显示推理耗时、目标区域占比；无目标时提示「未识别到目标区域」
 - **Building 修正演示**：内置 demo 图，无需选图即可体验 MobileSAM
+- **连跑 10 次** benchmark（平均 / P90 时延）
 - **Room 本地库**：选图检测写入 `ImageRecordRepository`，mask 与 `summary_json` 落盘
+- **任务/核查闭环**：本地 `Task`、`Anomaly` 表，推理后自动生成建筑候选卡片与缩略图，支持人工确认/排除、严重程度标注与手动 bbox 框选
+- **四 Tab 端侧 UI**：任务、影像、核查、报告；相册/GeoTIFF/内置样例图入口、核查卡片、拍照取证、报告预览与导出
+- **地图核查交互**：GeoTIFF 模式下可点击 mask 命中建筑对象，并在底部卡片中快速确认或排除
+- **离线报告**：端侧导出长图、JSON、CSV、PDF、GeoJSON 文件，报告页展示建筑明细、附件缩略图与长图预览，不依赖远程服务
+- **灾害与深化入口**：GPS 轨迹采集/闭合、双时相卷帘状态、MobileSAM 点选入口
 
 ### 地图页（Map）
 
@@ -157,7 +163,12 @@ MobileSAM 交付包与 demo 见 `skyedge_mobilesam_delivery/`；导出 / FP8 脚
    ```
 2. Android Studio 打开本仓库根目录
 3. 复制 `local.properties.example` 为 `local.properties`，填入 `sdk.dir` 与 `AMAP_API_KEY`（地图页需要）
-4. Run `app`
+4. 连接真机（推荐，地图/OpenGL 更稳定）或模拟器，Run `app`
+5. 影像页：可选择 **相册/无人机截图**、**导入 GeoTIFF** 或 **内置样例图**，再开始 Building 检测
+6. GeoTIFF 模式：点击 **开始检测** → 查看卫星底图、正射图与 mask 叠加 → 点击建筑 mask 打开底部标注卡片
+7. 核查页：在原图/mask 画布上点选候选或拖拽新增 bbox，填写类型、严重程度、备注并拍照取证
+8. 报告页：生成长图、JSON、CSV、PDF、GeoJSON，并通过系统分享导出
+9. 可选：**当前图连跑 10 次** 查看时延统计
 
 **检测页**
 

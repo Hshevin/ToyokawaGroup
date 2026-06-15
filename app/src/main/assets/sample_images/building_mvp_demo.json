@@ -1,0 +1,18 @@
+{
+  "name": "基层建筑核查样例",
+  "width": 768,
+  "height": 512,
+  "background": "#D7E6D0",
+  "roads": [
+    { "x": 0, "y": 230, "width": 768, "height": 58, "color": "#9EA4A8" },
+    { "x": 332, "y": 0, "width": 54, "height": 512, "color": "#A8ADB0" }
+  ],
+  "buildings": [
+    { "x": 88, "y": 66, "width": 128, "height": 86, "color": "#E9C46A" },
+    { "x": 248, "y": 78, "width": 76, "height": 118, "color": "#F4A261" },
+    { "x": 432, "y": 52, "width": 150, "height": 108, "color": "#E76F51" },
+    { "x": 96, "y": 326, "width": 144, "height": 96, "color": "#E9C46A" },
+    { "x": 430, "y": 318, "width": 96, "height": 126, "color": "#F4A261" },
+    { "x": 586, "y": 292, "width": 102, "height": 92, "color": "#E76F51" }
+  ]
+}

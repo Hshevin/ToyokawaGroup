@@ -11,9 +11,12 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
@@ -21,13 +24,22 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import coil.compose.AsyncImage
+import com.example.skyedge.core.api.AnomalyTypeUi
+import com.example.skyedge.core.api.AnomalyUiModel
+import com.example.skyedge.core.api.ReviewAnomalyRequest
+import com.example.skyedge.core.api.ReviewStatusUi
 import com.example.skyedge.ui.inspection.InferenceViewModel
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MapScreen(
     viewModel: InferenceViewModel,
@@ -37,6 +49,9 @@ fun MapScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val mapViewModel = remember(viewModel) { MapViewModel(viewModel) }
     val mapSession = uiState.mapSession
+    val selectedAnomaly = remember(uiState.anomalies, uiState.selectedAnomalyId) {
+        uiState.anomalies.firstOrNull { it.id == uiState.selectedAnomalyId }
+    }
     val openGeoTiff = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument(),
         onResult = { uri -> uri?.let(mapViewModel::loadGeoTiff) },
@@ -45,6 +60,10 @@ fun MapScreen(
     Box(modifier = modifier.fillMaxSize()) {
         AMapCompose(
             mapSession = mapSession,
+            onMapClick = { lat, lng ->
+                val hit = MapAnomalyHitTest.hitTest(lat, lng, mapSession, uiState.anomalies)
+                viewModel.selectAnomaly(hit?.id)
+            },
             modifier = Modifier.fillMaxSize(),
         )
 
@@ -161,6 +180,87 @@ fun MapScreen(
                         )
                     }
                 } ?: Spacer(modifier = Modifier.height(1.dp))
+            }
+        }
+
+        selectedAnomaly?.let { anomaly ->
+            ModalBottomSheet(
+                onDismissRequest = { viewModel.selectAnomaly(null) },
+            ) {
+                MapAnomalySheet(
+                    anomaly = anomaly,
+                    onConfirm = { type ->
+                        viewModel.reviewAnomaly(
+                            anomaly.id,
+                            ReviewAnomalyRequest(ReviewStatusUi.CONFIRMED, type, anomaly.comment),
+                        )
+                    },
+                    onReject = {
+                        viewModel.reviewAnomaly(
+                            anomaly.id,
+                            ReviewAnomalyRequest(ReviewStatusUi.REJECTED, comment = "地图点击排除"),
+                        )
+                    },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun MapAnomalySheet(
+    anomaly: AnomalyUiModel,
+    onConfirm: (AnomalyTypeUi) -> Unit,
+    onReject: () -> Unit,
+) {
+    var type by remember(anomaly.id) { mutableStateOf(anomaly.anomalyType) }
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+            if (anomaly.thumbnailPath.isNotBlank()) {
+                AsyncImage(
+                    model = anomaly.thumbnailPath,
+                    contentDescription = "建筑缩略图",
+                    modifier = Modifier.size(88.dp),
+                    contentScale = ContentScale.Crop,
+                )
+            }
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(anomaly.buildingCode.ifBlank { anomaly.id.take(8) }, style = MaterialTheme.typography.titleMedium)
+                Text("来源：${anomaly.source}")
+                Text("状态：${anomaly.reviewStatus.label}")
+                if (anomaly.location.isNotBlank()) Text(anomaly.location)
+            }
+        }
+        Text("人工标注")
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
+            listOf(
+                AnomalyTypeUi.NEW_BUILDING,
+                AnomalyTypeUi.SUSPECTED_ILLEGAL,
+                AnomalyTypeUi.TEMPORARY_STRUCTURE,
+            ).forEach { item ->
+                OutlinedButton(onClick = { type = item }) {
+                    Text(if (type == item) "✓ ${item.label}" else item.label)
+                }
+            }
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
+            listOf(AnomalyTypeUi.DAMAGED_COLLAPSED, AnomalyTypeUi.OTHER).forEach { item ->
+                OutlinedButton(onClick = { type = item }) {
+                    Text(if (type == item) "✓ ${item.label}" else item.label)
+                }
+            }
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(onClick = { onConfirm(type) }) {
+                Text("保存标注")
+            }
+            OutlinedButton(onClick = onReject) {
+                Text("排除")
             }
         }
     }

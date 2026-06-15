@@ -21,4 +21,6 @@ data class ImageRecordEntity(
     val summaryJson: String,
     @ColumnInfo(name = "err_info")
     val errInfo: String?,
+    @ColumnInfo(name = "task_id")
+    val taskId: String? = null,
 )
