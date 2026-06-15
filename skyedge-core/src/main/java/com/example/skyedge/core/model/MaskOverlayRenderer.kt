@@ -80,5 +80,8 @@ object MaskOverlayRenderer {
     }
 
     private fun overlayColor(modelKey: String, alpha: Int): Int =
-        Color.argb(alpha, 255, 48, 48)
+        when (modelKey) {
+            "building" -> Color.argb(alpha, 56, 178, 108)
+            else -> Color.argb(alpha, 255, 48, 48)
+        }
 }

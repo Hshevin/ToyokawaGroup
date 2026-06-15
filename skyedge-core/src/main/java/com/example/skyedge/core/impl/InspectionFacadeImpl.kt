@@ -1428,6 +1428,7 @@ class InspectionFacadeImpl(
     private fun ReviewStatusUi.toModel(): ReviewStatus = when (this) {
         ReviewStatusUi.PENDING -> ReviewStatus.PENDING
         ReviewStatusUi.CONFIRMED -> ReviewStatus.CONFIRMED
+        ReviewStatusUi.VERIFIED -> ReviewStatus.CONFIRMED
         ReviewStatusUi.REJECTED -> ReviewStatus.REJECTED
     }
 

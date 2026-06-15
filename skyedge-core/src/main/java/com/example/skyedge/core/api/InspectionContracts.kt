@@ -119,9 +119,10 @@ enum class AnomalyTypeUi(val value: String, val label: String) {
 }
 
 enum class ReviewStatusUi(val value: String, val label: String) {
-    PENDING("pending", "待核查"),
+    PENDING("pending", "未标注"),
     CONFIRMED("confirmed", "已标注"),
-    REJECTED("rejected", "已排除"),
+    VERIFIED("verified", "已核验"),
+    REJECTED("rejected", "核验有误"),
 }
 
 enum class SeverityUi(val value: String, val label: String) {

@@ -157,6 +157,11 @@
   - 模块：`skyedge-ui`
   - 说明：对应 PPT「任务」页与建筑/灾害两类任务模板
 
+- [x] **P1-UI-03** 建筑标注页对齐 `docs/goals/示例渲染图04.png`（场景一）
+  - 模块：`skyedge-ui/review`、`skyedge-core/api`、`skyedge-core/model`
+  - 说明：核查页从「画布 + ModalBottomSheet」改为单页布局：顶部「城市建筑场景 / 建筑标注」标题与右上「人工核查」胶囊；中部全宽影像叠加绿色 Building mask + 黄色 bbox 描边 + 选中建筑黄色定位针；分页指示条；「建筑详情」卡片含编号 / 位置 / 疑似图斑位置 / 形式（已标注 / 已核验 / 未标注 / 核验有误）FilterChip / 人工复核 FilterChip / 复核时间（附件按钮 + 备注）；底部「保存校正 / 取消校正」按钮
+  - 当前：布局、chip、按钮、状态枚举 `ReviewStatusUi`（新增 `VERIFIED`、标签改为「未标注/已标注/已核验/核验有误」）与 `MaskOverlayRenderer` 按 `modelKey` 取色（building → 绿）已落地；编译通过，待真机验收
+
 ### 1.1 影像导入与入口
 
 - [x] **P1-IMPORT-01** 统一影像来源入口：相册、无人机截图、内置样例图
@@ -411,6 +416,7 @@
 
 | 日期 | 说明 |
 |------|------|
+| 2026-06-16 | 建筑标注页 UI 对齐 `docs/goals/示例渲染图04.png`：重写 `ReviewScreen` 单页布局（含绿色 mask、黄色定位针、状态/类型 chip 行、保存/取消校正按钮），扩展 `ReviewStatusUi`（新增 `VERIFIED` + 标签改为「未标注/已标注/已核验/核验有误」），`MaskOverlayRenderer` 按 `modelKey` 取色；场景二（灾害范围校正）未触动 |
 | 2026-06-15 | 推进 Phase 1 MVP：补齐样例图、严重程度、缩略图、地图点击卡片、长图报告与报告明细预览 |
 | 2026-06-15 | 校准功能完成状态：区分完整实现、入口占位与待真机验收项 |
 | 2026-06-15 | 纳入 `docs/goals/` 产品目标摘要、示例渲染图内联、补充 UI/灾害/GeoJSON 等待办 |
