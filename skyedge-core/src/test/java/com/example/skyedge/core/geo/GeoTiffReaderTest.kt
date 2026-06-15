@@ -38,6 +38,9 @@ class GeoTiffReaderTest {
         assertEquals(29.8, result.metadata.boundsWgs84.sw.latitude, 0.0001)
         assertEquals(120.2, result.metadata.boundsWgs84.ne.longitude, 0.0001)
         assertEquals(30.0, result.metadata.boundsWgs84.ne.latitude, 0.0001)
+        val affine = requireNotNull(result.metadata.geoAffine)
+        assertEquals(120.0, affine.originLongitude, 0.0001)
+        assertEquals(0.1, affine.scaleX, 0.0001)
     }
 
     private fun minimalGeoTiff(): ByteArray {

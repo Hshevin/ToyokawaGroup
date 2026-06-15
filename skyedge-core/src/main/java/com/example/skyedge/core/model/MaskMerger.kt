@@ -28,7 +28,7 @@ object MaskMerger {
             IntArray(updatedIndices.size) { index ->
                 val x = index % width
                 val y = index / width
-                val previousForeground = previous[index] > 127
+                val previousForeground = previous[index] > 0
                 val updatedForeground = updatedIndices[index] > 0
                 val insideRoi = roi?.contains(x, y) == true
                 when {
@@ -43,27 +43,35 @@ object MaskMerger {
     }
 
     /**
-     * 框选时选中框内所有 Building 已检测区域，并与整图已有 mask 合并。
+     * 框选时选中框内已有 mask 区域，并与整图 mask 取并集。
      */
-    fun buildBoxSelectionFromBuilding(
-        buildingMaskPath: String,
+    fun buildBoxSelectionFromMask(
+        maskPath: String,
         box: MobileSamRoiBox,
         width: Int,
         height: Int,
     ): IntArray? {
-        val building = loadClassIndices(buildingMaskPath, width, height) ?: return null
+        val source = loadClassIndices(maskPath, width, height) ?: return null
         val boxSelection = IntArray(width * height)
         val xEnd = min(box.x2, width)
         val yEnd = min(box.y2, height)
         for (y in box.y1 until yEnd) {
             for (x in box.x1 until xEnd) {
-                if (building[y * width + x] > 0) {
+                if (source[y * width + x] > 0) {
                     boxSelection[y * width + x] = 1
                 }
             }
         }
-        return mergeWithPrevious(buildingMaskPath, boxSelection, width, height, roi = box)
+        return mergeWithPrevious(maskPath, boxSelection, width, height, roi = box)
     }
+
+    /** @deprecated 使用 [buildBoxSelectionFromMask] */
+    fun buildBoxSelectionFromBuilding(
+        buildingMaskPath: String,
+        box: MobileSamRoiBox,
+        width: Int,
+        height: Int,
+    ): IntArray? = buildBoxSelectionFromMask(buildingMaskPath, box, width, height)
 
     fun countForegroundInBox(classIndices: IntArray, width: Int, box: MobileSamRoiBox): Int {
         val xEnd = min(box.x2, width)
@@ -83,7 +91,9 @@ object MaskMerger {
     private fun loadClassIndices(maskPath: String, width: Int, height: Int): IntArray? {
         val bitmap = BitmapFactory.decodeFile(maskPath) ?: return null
         return try {
-            MaskResizer.resizeGrayMask(bitmap, width, height).map { if (it > 127) 1 else 0 }.toIntArray()
+            MaskResizer.resizeGrayMask(bitmap, width, height)
+                .map { if (it > 0) 1 else 0 }
+                .toIntArray()
         } finally {
             bitmap.recycle()
         }

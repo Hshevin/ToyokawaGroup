@@ -24,6 +24,7 @@ class AnomalyRepository(
         buildingCode: String,
         source: String = SOURCE_AUTO_SEGMENTATION,
         thumbnailPath: String = "",
+        location: String = "",
     ): AnomalyRecord {
         val now = System.currentTimeMillis()
         val record = AnomalyRecord(

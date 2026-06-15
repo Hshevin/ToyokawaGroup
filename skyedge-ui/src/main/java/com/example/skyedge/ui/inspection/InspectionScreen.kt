@@ -46,27 +46,31 @@ fun InspectionScreen(
     viewModel: InferenceViewModel,
     selectedImageUri: Uri?,
     onPickImage: () -> Unit,
+    embedded: Boolean = false,
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val correctionEnabled = uiState.interactiveImageReady && selectedImageUri != null
     val preparingCorrection = uiState.isInferring && uiState.lastMaskPath != null && !correctionEnabled
 
+    val scrollState = rememberScrollState()
     Column(
         modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(16.dp),
+            .then(if (embedded) Modifier.fillMaxWidth() else Modifier.fillMaxSize())
+            .then(if (!embedded) Modifier.verticalScroll(scrollState) else Modifier)
+            .padding(if (embedded) 0.dp else 16.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Text(
-            text = "低空巡检 AI 原型",
-            style = MaterialTheme.typography.headlineMedium,
-        )
-        Text(
-            text = "Building 分割 + 点选/框选局部修正",
-            style = MaterialTheme.typography.bodyMedium,
-        )
-        Spacer(modifier = Modifier.height(12.dp))
+        if (!embedded) {
+            Text(
+                text = "低空巡检 AI 原型",
+                style = MaterialTheme.typography.headlineMedium,
+            )
+            Text(
+                text = "Building 分割 + 点选/框选局部修正",
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+        }
 
         CorrectionStatusBanner(
             hasImage = selectedImageUri != null,
@@ -155,32 +159,34 @@ fun InspectionScreen(
             Spacer(modifier = Modifier.height(12.dp))
         }
 
-        Button(
-            onClick = onPickImage,
-            enabled = uiState.isModelReady && !uiState.isInferring,
-        ) {
-            Text(
-                when {
-                    uiState.isLoadingModel -> "模型加载中"
-                    !uiState.isModelReady -> "模型未就绪"
-                    uiState.isInferring -> "处理中"
-                    else -> "导入现场照片"
-                },
-            )
-        }
+        if (!embedded) {
+            Button(
+                onClick = onPickImage,
+                enabled = uiState.isModelReady && !uiState.isInferring,
+            ) {
+                Text(
+                    when {
+                        uiState.isLoadingModel -> "模型加载中"
+                        !uiState.isModelReady -> "模型未就绪"
+                        uiState.isInferring -> "处理中"
+                        else -> "导入现场照片"
+                    },
+                )
+            }
 
-        Spacer(modifier = Modifier.height(12.dp))
-        Button(
-            onClick = { viewModel.runMobileSamDemo("building_demo") },
-            enabled = uiState.isModelReady && !uiState.isInferring,
-        ) {
-            Text("Building 修正演示（无需选图）")
-        }
+            Spacer(modifier = Modifier.height(12.dp))
+            Button(
+                onClick = { viewModel.runMobileSamDemo("building_demo") },
+                enabled = uiState.isModelReady && !uiState.isInferring,
+            ) {
+                Text("Building 修正演示（无需选图）")
+            }
 
-        Spacer(modifier = Modifier.height(20.dp))
+            Spacer(modifier = Modifier.height(20.dp))
+        }
         Text(text = uiState.statusMessage)
 
-        if (uiState.recentRecords.isNotEmpty()) {
+        if (!embedded && uiState.recentRecords.isNotEmpty()) {
             Spacer(modifier = Modifier.height(16.dp))
             Text(
                 text = "本地检测记录（Room）",
@@ -309,7 +315,7 @@ private fun CorrectionStatusBanner(
 ) {
     val (containerColor, text) = when {
         correctionEnabled -> Color(0xFFE8F5E9) to buildString {
-            append("✓ 可交互：框选=选中框内全部已检测建筑；单击=MobileSAM 补漏")
+            append("✓ 可交互：单击=SAM 补漏（叠加）；框选=合并框内已有区域")
             if (roiActive) append("（已按 Building 检测裁剪 ROI）")
         }
         preparingCorrection -> Color(0xFFFFF3E0) to "⏳ Building 已完成，正在编码修正区域（SAM 已在后台预热）…"

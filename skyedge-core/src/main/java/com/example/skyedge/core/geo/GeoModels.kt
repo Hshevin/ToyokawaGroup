@@ -36,6 +36,7 @@ data class GeoMetadata(
     val modelInputHeight: Int,
     val boundsWgs84: GeoBounds,
     val boundsGcj02: GeoBounds,
+    val geoAffine: GeoAffine? = null,
     val orthoPreviewPath: String? = null,
     val maskOverlayPath: String? = null,
 )

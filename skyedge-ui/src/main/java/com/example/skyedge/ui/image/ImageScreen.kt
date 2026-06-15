@@ -30,7 +30,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import com.example.skyedge.ui.inspection.InferenceViewModel
-import com.example.skyedge.ui.inspection.buildMaskOverlay
+import com.example.skyedge.ui.inspection.InspectionScreen
 import com.example.skyedge.ui.map.MapScreen
 
 @Composable
@@ -45,9 +45,6 @@ fun ImageScreen(
     modifier: Modifier = Modifier,
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-    val overlayBitmap = remember(uiState.lastMaskPath, uiState.selectedModelKey) {
-        buildMaskOverlay(uiState.lastMaskPath, uiState.selectedModelKey)
-    }
 
     if (uiState.mapSession != null) {
         MapScreen(
@@ -56,13 +53,14 @@ fun ImageScreen(
             modifier = modifier,
         )
     } else {
+        val scrollState = rememberScrollState()
         Column(
-        modifier = modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
+            modifier = modifier
+                .fillMaxSize()
+                .verticalScroll(scrollState)
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
         Text("影像导入", style = MaterialTheme.typography.headlineMedium)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             viewModel.modelChoices.forEach { choice ->
@@ -103,35 +101,13 @@ fun ImageScreen(
             Text(uiState.statusMessage)
         }
 
-        selectedImageUri?.let { uri ->
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally),
-            ) {
-                AsyncImage(
-                    model = uri,
-                    contentDescription = "原图",
-                    modifier = Modifier.size(170.dp),
-                    contentScale = ContentScale.Crop,
-                )
-                Box(Modifier.size(170.dp)) {
-                    AsyncImage(
-                        model = uri,
-                        contentDescription = "处理底图",
-                        modifier = Modifier.matchParentSize(),
-                        contentScale = ContentScale.Crop,
-                    )
-                    overlayBitmap?.let {
-                        Image(
-                            bitmap = it.asImageBitmap(),
-                            contentDescription = "mask 叠加",
-                            modifier = Modifier.matchParentSize(),
-                            contentScale = ContentScale.Crop,
-                        )
-                    }
-                }
-            }
-            Spacer(Modifier.height(4.dp))
+        if (selectedImageUri != null) {
+            InspectionScreen(
+                viewModel = viewModel,
+                selectedImageUri = selectedImageUri,
+                onPickImage = onPickImage,
+                embedded = true,
+            )
             OutlinedButton(onClick = onBenchmark, enabled = !uiState.isInferring) {
                 Text("当前图连跑 10 次")
             }
