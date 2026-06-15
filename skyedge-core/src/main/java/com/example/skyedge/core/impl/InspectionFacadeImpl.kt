@@ -39,6 +39,7 @@ import com.example.skyedge.core.api.TaskStatusUi
 import com.example.skyedge.core.api.TaskUiModel
 import com.example.skyedge.core.domain.InspectionResult
 import com.example.skyedge.core.geo.GeoBounds
+import com.example.skyedge.core.geo.GeoAnomalyLocationResolver
 import com.example.skyedge.core.geo.GeoJsonIO
 import com.example.skyedge.core.geo.GeoTiffReader
 import com.example.skyedge.core.integration.SkyEdgeImageAnalyser
@@ -297,16 +298,17 @@ class InspectionFacadeImpl(
     private suspend fun prepareCorrection(uri: Uri, roi: MobileSamRoiBox?): EncodeOutcome {
         val bitmap = ImagePreprocessor.loadOrientedBitmap(context, uri)
             ?: error("无法读取图片")
-        val effectiveRoi = roi ?: (_state.value.buildingMaskPath ?: _state.value.lastMaskPath)?.let { maskPath ->
-            MobileSamRoi.boxFromMaskFile(File(maskPath), bitmap.width, bitmap.height)
-        }
         awaitCorrectionEnginePreload()
         val engine = correctionEngine ?: error("修正引擎未加载")
-        engine.encode(bitmap, effectiveRoi).getOrThrow()
-        val outcome = EncodeOutcome(bitmap.width, bitmap.height, effectiveRoi != null)
+        engine.encode(bitmap, roi).getOrThrow()
+        val outcome = EncodeOutcome(bitmap.width, bitmap.height, roi != null)
         bitmap.recycle()
         return outcome
     }
+
+    private fun currentWorkingMaskPath(): String? =
+        _state.value.lastMaskPath?.takeIf { File(it).exists() }
+            ?: _state.value.buildingMaskPath?.takeIf { File(it).exists() }
 
     private fun prefetchCorrectionDecoderInBackground() {
         scope.launch(Dispatchers.Default) {
@@ -376,7 +378,7 @@ class InspectionFacadeImpl(
         }
         val mappedX = x.coerceIn(0f, imageWidth.toFloat())
         val mappedY = y.coerceIn(0f, imageHeight.toFloat())
-        val baseMaskPath = _state.value.buildingMaskPath ?: _state.value.lastMaskPath
+        val baseMaskPath = currentWorkingMaskPath()
         val outcome = withContext(Dispatchers.Default) {
             mobileEngine.inferPoint(
                 mappedX,
@@ -425,29 +427,29 @@ class InspectionFacadeImpl(
             imageWidth = imageWidth,
             imageHeight = imageHeight,
         )
+        val currentMask = currentWorkingMaskPath()
+        if (currentMask == null) {
+            updateStatus("请先完成 Building 检测后再框选")
+            return
+        }
         _state.update {
             it.copy(
                 isInferring = true,
-                statusMessage = "已框选区域，正在更新 ROI…",
+                statusMessage = "正在应用框选…",
             )
         }
-        prepareCorrectionState(uri, roi = box)
-        if (!_state.value.interactiveImageReady) return
 
-        val buildingPath = _state.value.buildingMaskPath
-        val boxApplied = buildingPath?.let { path ->
-            withContext(Dispatchers.Default) {
-                runCatching {
-                    MaskMerger.buildBoxSelectionFromBuilding(
-                        buildingMaskPath = path,
-                        box = box,
-                        width = imageWidth,
-                        height = imageHeight,
-                    )
-                }.getOrNull()
-            }
+        val boxApplied = withContext(Dispatchers.Default) {
+            runCatching {
+                MaskMerger.buildBoxSelectionFromMask(
+                    maskPath = currentMask,
+                    box = box,
+                    width = imageWidth,
+                    height = imageHeight,
+                )
+            }.getOrNull()
         }
-        val minBoxPixels = (box.width * box.height * 0.005f).toInt().coerceAtLeast(48)
+        val minBoxPixels = (box.width * box.height * 0.002f).toInt().coerceIn(16, 512)
         if (boxApplied != null && MaskMerger.countForegroundInBox(boxApplied, imageWidth, box) >= minBoxPixels) {
             val maskFile = MaskWriter.maskFile(interactiveSessionDir)
             withContext(Dispatchers.Default) {
@@ -460,7 +462,7 @@ class InspectionFacadeImpl(
             }
             val ratio = MaskMerger.defectAreaRatio(boxApplied)
             val (markerX, markerY) = MobileSamRoi.promptPointInBox(
-                maskFile = buildingPath?.let { File(it) },
+                maskFile = File(currentMask),
                 box = box,
                 imageWidth = imageWidth,
                 imageHeight = imageHeight,
@@ -470,28 +472,31 @@ class InspectionFacadeImpl(
                     isInferring = false,
                     lastMaskPath = maskFile.absolutePath,
                     maskUpdateSeq = current.maskUpdateSeq + 1,
-                    interactiveRoiActive = true,
+                    interactiveRoiActive = false,
                     interactivePoints = current.interactivePoints + InteractivePoint(markerX, markerY),
                     statusMessage = buildString {
-                        append("框选已应用：选中框内全部 Building 检测区域\n")
+                        append("框选已合并：保留原 mask 并选中框内区域\n")
                         append("目标区域占比: ${"%.2f".format(ratio * 100)}%\n")
-                        append("若框内有漏检，可在框内单击用 MobileSAM 补充")
+                        append("框内漏检可继续单击补充")
                     },
                 )
             }
+            prepareCorrectionState(uri, roi = null)
             return
         }
 
-        val buildingMask = buildingPath?.let { File(it) }
+        _state.update {
+            it.copy(statusMessage = "框内检测较少，改用 MobileSAM 点选补充…")
+        }
+        if (correctionEngine?.isImageEncoded != true) {
+            prepareCorrectionState(uri, roi = null)
+        }
         val (promptX, promptY) = MobileSamRoi.promptPointInBox(
-            maskFile = buildingMask,
+            maskFile = File(currentMask),
             box = box,
             imageWidth = imageWidth,
             imageHeight = imageHeight,
         )
-        _state.update {
-            it.copy(statusMessage = "框内 Building 检测较少，改用 MobileSAM 点选分割…")
-        }
         inferInteractivePoint(promptX, promptY, imageWidth, imageHeight)
     }
 
@@ -776,18 +781,24 @@ class InspectionFacadeImpl(
             source = AnomalyRepository.SOURCE_MANUAL_BOX,
         )
         val record = request.imageLocalUrl?.let { imageRecordRepository.queryByLocalUrl(it) }
+        val resolvedLocation = request.location.ifBlank {
+            record?.let { resolveAnomalyLocation(it, request.bbox, maskPath = null) }
+                ?.takeIf { it.isNotBlank() }
+                ?: GeoAnomalyLocationResolver.fallbackPercentLabel(request.bbox)
+        }
         val thumbnailPath = record?.let { createThumbnail(inserted.id, it.imgUrl, it.localUrl, request.bbox) }.orEmpty()
         anomalyRepository.updateFields(
             id = inserted.id,
             anomalyType = request.anomalyType.toModel(),
             reviewStatus = ReviewStatus.CONFIRMED,
-            location = request.location,
+            location = resolvedLocation,
             comment = request.comment,
             severity = request.severity,
             thumbnailPath = thumbnailPath,
         )
         taskRepository.updateStatus(request.taskId, TaskStatus.MANUAL_REVIEW)
         refreshTaskState(request.taskId)
+        selectAnomaly(inserted.id)
         inserted.id
     }
 
@@ -1098,6 +1109,7 @@ class InspectionFacadeImpl(
                 imageLocalUrl = record.localUrl,
                 bbox = instance.bbox.toModel(),
                 buildingCode = "B-${(start + index).toString().padStart(3, '0')}",
+                location = resolveAnomalyLocation(record, instance.bbox, maskPath),
             )
             val thumbnailPath = createThumbnail(inserted.id, record.imgUrl, record.localUrl, instance.bbox)
             if (thumbnailPath.isNotBlank()) {
@@ -1427,6 +1439,40 @@ class InspectionFacadeImpl(
 
     private fun BoundingBoxDto.toModel(): BoundingBoxRecord =
         BoundingBoxRecord(x, y, width, height)
+
+    private fun resolveAnomalyLocation(
+        record: ImageRecord,
+        bbox: BoundingBoxDto,
+        maskPath: String?,
+    ): String {
+        val sessionDir = File(record.localUrl.trimEnd(File.separatorChar))
+        val metadata = GeoJsonIO.read(GeoJsonIO.geoFile(sessionDir)) ?: return bbox.autoLocationLabel()
+        val resolvedMaskPath = maskPath?.takeIf { it.isNotBlank() }
+            ?: SkyEdgeImageAnalyser.maskPathFromSummary(record.summaryJson)
+            ?: return GeoAnomalyLocationResolver.resolve(
+                metadata = metadata,
+                bbox = bbox,
+                maskWidth = metadata.previewWidth,
+                maskHeight = metadata.previewHeight,
+            )
+        val maskSize = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeFile(resolvedMaskPath, maskSize)
+        val maskWidth = maskSize.outWidth
+        val maskHeight = maskSize.outHeight
+        if (maskWidth <= 0 || maskHeight <= 0) {
+            return GeoAnomalyLocationResolver.resolve(
+                metadata = metadata,
+                bbox = bbox,
+                maskWidth = metadata.previewWidth,
+                maskHeight = metadata.previewHeight,
+            )
+        }
+        return GeoAnomalyLocationResolver.resolve(metadata, bbox, maskWidth, maskHeight)
+    }
+
+    /** 内置样例/普通照片无 GPS 时，用画面百分比描述候选位置。 */
+    private fun BoundingBoxDto.autoLocationLabel(): String =
+        GeoAnomalyLocationResolver.fallbackPercentLabel(this)
 
     private fun BoundingBoxRecord.toUi(): BoundingBoxDto =
         BoundingBoxDto(x, y, width, height)

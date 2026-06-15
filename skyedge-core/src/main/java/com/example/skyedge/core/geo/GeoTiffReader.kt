@@ -29,8 +29,8 @@ object GeoTiffReader {
             "GeoTIFF 缺少标准 ModelTiepoint / ModelPixelScale 地理参考信息"
         }
 
-        val boundsWgs84 = GeoAffine.fromTiepointAndScale(tiepoint, pixelScale)
-            .boundsFor(parsed.width, parsed.height)
+        val affine = GeoAffine.fromTiepointAndScale(tiepoint, pixelScale)
+        val boundsWgs84 = affine.boundsFor(parsed.width, parsed.height)
         val boundsGcj02 = CoordinateConverter.boundsWgs84ToGcj02(boundsWgs84)
         val preview = TiffImageDecoder.decodeBitmap(bytes, maxEdge)
         return GeoRasterLoadResult(
@@ -45,6 +45,7 @@ object GeoTiffReader {
                 modelInputHeight = DEFAULT_SEGMENTATION_INPUT_SIZE,
                 boundsWgs84 = boundsWgs84,
                 boundsGcj02 = boundsGcj02,
+                geoAffine = affine,
             ),
         )
     }

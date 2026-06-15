@@ -67,7 +67,23 @@ abstract class ImageRecordDatabase : RoomDatabase() {
 
         private val MIGRATION_2_3 = object : Migration(2, 3) {
             override fun migrate(db: SupportSQLiteDatabase) {
-                db.execSQL("ALTER TABLE anomaly ADD COLUMN thumbnail_path TEXT NOT NULL DEFAULT ''")
+                // MIGRATION_1_2 already creates anomaly.thumbnail_path; only add if missing
+                // (e.g. intermediate v2 builds that predated that column).
+                val cursor = db.query("PRAGMA table_info(anomaly)")
+                var hasThumbnailPath = false
+                val nameIndex = cursor.getColumnIndex("name")
+                while (cursor.moveToNext()) {
+                    if (nameIndex >= 0 && cursor.getString(nameIndex) == "thumbnail_path") {
+                        hasThumbnailPath = true
+                        break
+                    }
+                }
+                cursor.close()
+                if (!hasThumbnailPath) {
+                    db.execSQL(
+                        "ALTER TABLE anomaly ADD COLUMN thumbnail_path TEXT NOT NULL DEFAULT ''",
+                    )
+                }
             }
         }
 
