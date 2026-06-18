@@ -186,6 +186,12 @@ class InferenceViewModel @JvmOverloads constructor(
         facade.selectAnomaly(id)
     }
 
+    fun refreshAnomalyLocations() {
+        viewModelScope.launch {
+            facade.refreshAnomalyLocations()
+        }
+    }
+
     fun refreshHistory() {
         facade.refreshHistory()
     }

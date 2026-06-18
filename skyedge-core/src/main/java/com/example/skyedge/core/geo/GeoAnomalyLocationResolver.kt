@@ -71,6 +71,9 @@ object GeoAnomalyLocationResolver {
         return "画面区域 中心约 ($cx%, $cy%)"
     }
 
+    fun looksLikePercentFallback(location: String): Boolean =
+        location.isBlank() || location.startsWith("画面区域")
+
     private fun formatCoordPair(point: GeoLatLng): String {
         val latHemisphere = if (point.latitude >= 0) "N" else "S"
         val lngHemisphere = if (point.longitude >= 0) "E" else "W"

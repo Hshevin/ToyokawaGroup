@@ -116,6 +116,15 @@ fun ReviewScreen(
             uiState.recentRecords.firstOrNull { it.localUrl == localUrl }
         } ?: uiState.recentRecords.firstOrNull()
     }
+    val visibleAnomalies = remember(anomalies, activeRecord?.localUrl) {
+        val imageUrl = activeRecord?.localUrl
+        if (imageUrl.isNullOrBlank()) anomalies
+        else anomalies.filter { it.imageLocalUrl == imageUrl || it.imageLocalUrl.isNullOrBlank() }
+    }
+
+    LaunchedEffect(activeTask?.id) {
+        viewModel.refreshAnomalyLocations()
+    }
     val overlayBitmap = remember(uiState.lastMaskPath, uiState.selectedModelKey) {
         buildMaskOverlay(uiState.lastMaskPath, uiState.selectedModelKey)
     }
@@ -142,7 +151,7 @@ fun ReviewScreen(
         AnnotationImageCanvas(
             imageUri = activeRecord?.sourceUri,
             overlayBitmap = overlayBitmap,
-            anomalies = anomalies,
+            anomalies = visibleAnomalies,
             selectedId = selected?.id,
             dragStart = dragStart,
             dragEnd = dragEnd,
@@ -500,33 +509,39 @@ private fun AnnotationDetailCard(
     onCancel: () -> Unit,
 ) {
     var code by remember(anomaly.id) { mutableStateOf(anomaly.buildingCode) }
-    var location by remember(anomaly.id) {
-        mutableStateOf(
-            anomaly.location.ifBlank {
-                GeoAnomalyLocationResolver.fallbackPercentLabel(anomaly.bbox)
-            },
-        )
-    }
+    var location by remember(anomaly.id) { mutableStateOf(anomaly.location) }
     var comment by remember(anomaly.id) { mutableStateOf(anomaly.comment) }
     var type by remember(anomaly.id) { mutableStateOf(anomaly.anomalyType) }
     var reviewStatus by remember(anomaly.id) { mutableStateOf(anomaly.reviewStatus) }
+    var locationDirty by remember(anomaly.id) { mutableStateOf(false) }
     val focusManager = LocalFocusManager.current
+    val percentHint = remember(anomaly.bbox) {
+        GeoAnomalyLocationResolver.fallbackPercentLabel(anomaly.bbox)
+    }
 
     LaunchedEffect(anomaly.id) {
         code = anomaly.buildingCode
-        location = anomaly.location.ifBlank {
-            GeoAnomalyLocationResolver.fallbackPercentLabel(anomaly.bbox)
-        }
+        location = anomaly.location
+        locationDirty = false
         comment = anomaly.comment
         type = anomaly.anomalyType
         reviewStatus = anomaly.reviewStatus
+    }
+
+    LaunchedEffect(anomaly.location) {
+        if (!locationDirty && anomaly.location.isNotBlank()) {
+            location = anomaly.location
+        }
     }
 
     LaunchedEffect(anomaly.reviewStatus) {
         reviewStatus = anomaly.reviewStatus
     }
 
-    LaunchedEffect(code, location, comment, type) {
+    LaunchedEffect(code, location, comment, type, locationDirty) {
+        if (GeoAnomalyLocationResolver.looksLikePercentFallback(location) && !locationDirty) {
+            return@LaunchedEffect
+        }
         onUpdate(
             AnomalyUpdateRequest(
                 buildingCode = code,
@@ -595,10 +610,16 @@ private fun AnnotationDetailCard(
                 )
                 OutlinedTextField(
                     value = location,
-                    onValueChange = { location = it },
+                    onValueChange = {
+                        location = it
+                        locationDirty = true
+                    },
                     label = { Text("位置") },
                     singleLine = true,
                     modifier = Modifier.weight(1f),
+                    placeholder = {
+                        if (location.isBlank()) Text(percentHint)
+                    },
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                     keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() }),
                 )
@@ -606,13 +627,17 @@ private fun AnnotationDetailCard(
 
             // 建筑物疑似图斑位置
             OutlinedTextField(
-                value = anomaly.location.ifBlank {
-                    GeoAnomalyLocationResolver.fallbackPercentLabel(anomaly.bbox)
+                value = location,
+                onValueChange = {
+                    location = it
+                    locationDirty = true
                 },
-                onValueChange = { location = it },
                 label = { Text("建筑物疑似图斑位置") },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
+                placeholder = {
+                    if (location.isBlank()) Text(percentHint)
+                },
                 supportingText = { Text("支持手动修改；GeoTIFF 模式下会回填经纬度") },
             )
 

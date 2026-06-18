@@ -242,6 +242,8 @@ class FakeInspectionFacade(
         _state.value = _state.value.copy(selectedAnomalyId = id)
     }
 
+    override suspend fun refreshAnomalyLocations() = Unit
+
     override suspend fun benchmark(uri: Uri, runs: Int) {
         _state.value = _state.value.copy(
             isInferring = false,

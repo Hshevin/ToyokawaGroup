@@ -14,10 +14,13 @@ import org.robolectric.annotation.Config
 class GeoTiffReaderTest {
     @Test
     fun decode_readsLzwCompressedSpaceNetSample() {
-        val sample = File("../../test_img/building/SN2_buildings_train_AOI_2_Vegas_RGB_img1.tif")
-        assumeTrue("需要 test_img 样本", sample.exists())
+        val sample = sequenceOf(
+            File("../geotiff_map_test_samples/rgb_geotiff/building/SN2_buildings_train_AOI_2_Vegas_RGB_img1.tif"),
+            File("../../test_img/building/SN2_buildings_train_AOI_2_Vegas_RGB_img1.tif"),
+        ).firstOrNull { it.exists() }
+        assumeTrue("需要 GeoTIFF 样本（geotiff_map_test_samples 或 test_img）", sample != null)
 
-        val result = GeoTiffReader.decode(sample.readBytes(), maxEdge = 2048)
+        val result = GeoTiffReader.decode(sample!!.readBytes(), maxEdge = 2048)
 
         assertEquals(163, result.previewBitmap.width)
         assertEquals(163, result.previewBitmap.height)

@@ -303,6 +303,7 @@ interface InspectionFacade {
     fun setMaskAlpha(alpha: Float)
     fun clearMapSession()
     fun selectAnomaly(id: String?)
+    suspend fun refreshAnomalyLocations()
     suspend fun benchmark(uri: Uri, runs: Int = 10)
     fun refreshHistory()
     fun close()

@@ -8,10 +8,13 @@ import org.junit.Test
 class TiffLzwDecompressorTest {
     @Test
     fun decompress_matchesStripSizesForSpaceNetSample() {
-        val sample = File("../../test_img/building/SN2_buildings_train_AOI_2_Vegas_RGB_img1.tif")
-        assumeTrue("需要 test_img 样本", sample.exists())
+        val sample = sequenceOf(
+            File("../geotiff_map_test_samples/rgb_geotiff/building/SN2_buildings_train_AOI_2_Vegas_RGB_img1.tif"),
+            File("../../test_img/building/SN2_buildings_train_AOI_2_Vegas_RGB_img1.tif"),
+        ).firstOrNull { it.exists() }
+        assumeTrue("需要 GeoTIFF 样本（geotiff_map_test_samples 或 test_img）", sample != null)
 
-        val bytes = sample.readBytes()
+        val bytes = sample!!.readBytes()
         val parsed = TiffImageDecoder.parse(bytes)
         val stripOffsets = parsed.fields.longArray(TiffImageDecoder.TAG_STRIP_OFFSETS)
         val stripByteCounts = parsed.fields.longArray(TiffImageDecoder.TAG_STRIP_BYTE_COUNTS)
