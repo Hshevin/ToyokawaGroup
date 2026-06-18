@@ -144,7 +144,16 @@ internal object TiffImageDecoder {
         val compressed = bytes.copyOfRange(stripStart, stripStart + stripSize)
         val raw = when (compression) {
             COMPRESSION_NONE -> compressed
-            COMPRESSION_LZW -> TiffLzwDecompressor.decompress(compressed, expectedSize)
+            COMPRESSION_LZW -> try {
+                TiffLzwDecompressor.decompress(compressed, expectedSize)
+            } catch (error: IllegalArgumentException) {
+                throw IllegalArgumentException(
+                    "LZW strip $stripIndex 解压失败（${compressed.size} 字节，" +
+                        "head=${compressed.take(4).joinToString("") { "%02x".format(it.toInt() and 0xFF) }}）: " +
+                        error.message,
+                    error,
+                )
+            }
             COMPRESSION_DEFLATE -> TiffDeflateDecompressor.decompress(compressed, expectedSize)
             else -> error("不支持的 TIFF 压缩方式: $compression")
         }

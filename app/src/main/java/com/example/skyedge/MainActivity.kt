@@ -1,6 +1,7 @@
 package com.example.skyedge
 
 import android.Manifest
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.Canvas
@@ -61,7 +62,16 @@ class MainActivity : ComponentActivity() {
             val geoTiffLauncher = rememberLauncherForActivityResult(
                 contract = ActivityResultContracts.OpenDocument(),
                 onResult = { uri: Uri? ->
-                    uri?.let { viewModel.loadGeoTiff(it) }
+                    uri?.let {
+                        try {
+                            contentResolver.takePersistableUriPermission(
+                                it,
+                                Intent.FLAG_GRANT_READ_URI_PERMISSION,
+                            )
+                        } catch (_: SecurityException) {
+                        }
+                        viewModel.loadGeoTiff(it)
+                    }
                 },
             )
             val historicalImageLauncher = rememberLauncherForActivityResult(

@@ -571,11 +571,22 @@ class InspectionFacadeImpl(
                 val sessionId = UUID.randomUUID().toString()
                 val sessionDir = File(context.filesDir, "${ModelSpec.ANALYSIS_DIR}/$sessionId").apply { mkdirs() }
                 val sourceFile = File(sessionDir, "source.tiff")
+                val expectedSize = context.contentResolver.openFileDescriptor(uri, "r")?.use { descriptor ->
+                    descriptor.statSize
+                } ?: -1L
                 context.contentResolver.openInputStream(uri)?.use { input ->
                     FileOutputStream(sourceFile).use { output -> input.copyTo(output) }
                 } ?: error("无法读取 GeoTIFF: $uri")
 
-                val loaded = GeoTiffReader.decode(sourceFile.readBytes())
+                val bytes = sourceFile.readBytes()
+                if (expectedSize > 0 && bytes.size.toLong() != expectedSize) {
+                    error(
+                        "GeoTIFF 文件未完整读取（已复制 ${bytes.size} 字节，期望 $expectedSize 字节）。" +
+                            "请从 Download 重新选择 .tif 文件",
+                    )
+                }
+
+                val loaded = GeoTiffReader.decode(bytes)
                 val previewFile = File(sessionDir, "preview.png")
                 FileOutputStream(previewFile).use { out ->
                     loaded.previewBitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
@@ -743,7 +754,7 @@ class InspectionFacadeImpl(
     }
 
     override suspend fun listAnomalies(taskId: String): List<AnomalyUiModel> = withContext(Dispatchers.IO) {
-        anomalyRepository.listByTask(taskId).map { it.toUi() }
+        anomalyRepository.listByTask(taskId).map { enrichAnomalyLocation(it).toUi() }
     }
 
     override suspend fun submitAnomaly(request: SubmitAnomalyRequest): String = withContext(Dispatchers.IO) {
@@ -794,12 +805,20 @@ class InspectionFacadeImpl(
 
     override suspend fun updateAnomaly(id: String, fields: AnomalyUpdateRequest) {
         withContext(Dispatchers.IO) {
+            val current = anomalyRepository.get(id)
+            val location = fields.location?.let { requested ->
+                if (current != null && GeoAnomalyLocationResolver.looksLikePercentFallback(requested)) {
+                    resolveGeoLocationLabel(current) ?: requested
+                } else {
+                    requested
+                }
+            }
             val updated = anomalyRepository.updateFields(
                 id = id,
                 anomalyType = fields.anomalyType?.toModel(),
                 reviewStatus = fields.reviewStatus?.toModel(),
                 buildingCode = fields.buildingCode,
-                location = fields.location,
+                location = location,
                 comment = fields.comment,
                 severity = fields.severity,
                 bbox = fields.bbox?.toModel(),
@@ -949,6 +968,19 @@ class InspectionFacadeImpl(
         _state.update { it.copy(selectedAnomalyId = id) }
     }
 
+    override suspend fun refreshAnomalyLocations() {
+        val taskId = _state.value.activeTask?.id ?: return
+        withContext(Dispatchers.IO) {
+            imageRecordRepository.queryByTaskId(taskId).forEach { record ->
+                if (record.status != AnalyseStatus.DONE || record.analyseType != AnalyseType.BUILDING) return@forEach
+                val maskPath = SkyEdgeImageAnalyser.maskPathFromSummary(record.summaryJson) ?: return@forEach
+                backfillAnomalyLocationsForImage(record, maskPath)
+            }
+            anomalyRepository.listByTask(taskId).forEach { enrichAnomalyLocation(it) }
+            refreshTaskState(taskId)
+        }
+    }
+
     override fun refreshHistory() {
         scope.launch {
             val recent = withContext(Dispatchers.IO) { loadRecentRecords() }
@@ -1045,7 +1077,7 @@ class InspectionFacadeImpl(
     private suspend fun refreshTaskState(activeTaskId: String?) {
         val tasks = loadTasksWithStats()
         val active = activeTaskId?.let { id -> tasks.firstOrNull { it.id == id } } ?: tasks.firstOrNull()
-        val anomalies = active?.let { anomalyRepository.listByTask(it.id).map { record -> record.toUi() } }.orEmpty()
+        val anomalies = active?.let { anomalyRepository.listByTask(it.id).map { record -> enrichAnomalyLocation(record).toUi() } }.orEmpty()
         val draft = active?.let { buildReportDraft(it.id) }
         _state.update {
             it.copy(
@@ -1067,13 +1099,16 @@ class InspectionFacadeImpl(
 
     private suspend fun loadActiveAnomalies(): List<AnomalyUiModel> =
         _state.value.activeTask?.let { active ->
-            anomalyRepository.listByTask(active.id).map { it.toUi() }
+            anomalyRepository.listByTask(active.id).map { enrichAnomalyLocation(it).toUi() }
         }.orEmpty()
 
     private suspend fun createDraftAnomaliesIfNeeded(taskId: String, record: ImageRecord) {
         if (record.status != AnalyseStatus.DONE || record.analyseType != AnalyseType.BUILDING) return
-        if (anomalyRepository.listByImage(record.localUrl).isNotEmpty()) return
         val maskPath = SkyEdgeImageAnalyser.maskPathFromSummary(record.summaryJson) ?: return
+        if (anomalyRepository.listByImage(record.localUrl).isNotEmpty()) {
+            backfillAnomalyLocationsForImage(record, maskPath)
+            return
+        }
         val instances = MaskInstanceExtractor.extract(maskPath)
             .sortedByDescending { it.pixelArea }
             .take(MAX_AUTO_ANOMALIES)
@@ -1093,6 +1128,19 @@ class InspectionFacadeImpl(
         }
         if (instances.isNotEmpty()) {
             taskRepository.updateStatus(taskId, TaskStatus.MANUAL_REVIEW)
+        }
+    }
+
+    /** Re-resolve percent-only locations when geo.json is present (e.g. after GeoTIFF import or app upgrade). */
+    private suspend fun backfillAnomalyLocationsForImage(record: ImageRecord, maskPath: String) {
+        val sessionDir = File(record.localUrl.trimEnd(File.separatorChar))
+        if (!GeoJsonIO.geoFile(sessionDir).exists()) return
+        anomalyRepository.listByImage(record.localUrl).forEach { anomaly ->
+            if (!GeoAnomalyLocationResolver.looksLikePercentFallback(anomaly.location)) return@forEach
+            val resolved = resolveAnomalyLocation(record, anomaly.bbox.toUi(), maskPath)
+            if (!GeoAnomalyLocationResolver.looksLikePercentFallback(resolved)) {
+                anomalyRepository.updateFields(anomaly.id, location = resolved)
+            }
         }
     }
 
@@ -1449,6 +1497,21 @@ class InspectionFacadeImpl(
     /** 内置样例/普通照片无 GPS 时，用画面百分比描述候选位置。 */
     private fun BoundingBoxDto.autoLocationLabel(): String =
         GeoAnomalyLocationResolver.fallbackPercentLabel(this)
+
+    private suspend fun enrichAnomalyLocation(record: AnomalyRecord): AnomalyRecord {
+        if (!GeoAnomalyLocationResolver.looksLikePercentFallback(record.location)) return record
+        val resolved = resolveGeoLocationLabel(record) ?: return record
+        anomalyRepository.updateFields(record.id, location = resolved)
+        return record.copy(location = resolved)
+    }
+
+    private suspend fun resolveGeoLocationLabel(record: AnomalyRecord): String? {
+        val imageLocalUrl = record.imageLocalUrl?.takeIf { it.isNotBlank() } ?: return null
+        val imageRecord = imageRecordRepository.queryByLocalUrl(imageLocalUrl) ?: return null
+        val maskPath = SkyEdgeImageAnalyser.maskPathFromSummary(imageRecord.summaryJson)
+        val resolved = resolveAnomalyLocation(imageRecord, record.bbox.toUi(), maskPath)
+        return resolved.takeUnless { GeoAnomalyLocationResolver.looksLikePercentFallback(it) }
+    }
 
     private fun BoundingBoxRecord.toUi(): BoundingBoxDto =
         BoundingBoxDto(x, y, width, height)
