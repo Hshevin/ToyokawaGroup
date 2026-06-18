@@ -77,7 +77,7 @@ object MobileSamRoi {
             for (x in 0 until width) {
                 val pixel = row[x]
                 val value = pixel and 0xFF
-                if (value > 127) {
+                if (value > 0) {
                     if (x < minX) minX = x
                     if (y < minY) minY = y
                     if (x > maxX) maxX = x
@@ -116,7 +116,7 @@ object MobileSamRoi {
             var count = 0
             for (y in box.y1 until yEnd) {
                 for (x in box.x1 until xEnd) {
-                    if (mask.getPixel(x, y) and 0xFF > 127) {
+                    if (mask.getPixel(x, y) and 0xFF > 0) {
                         sumX += x
                         sumY += y
                         count++

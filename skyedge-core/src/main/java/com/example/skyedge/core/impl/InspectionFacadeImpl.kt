@@ -86,6 +86,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
+import java.util.concurrent.TimeoutException
 import org.json.JSONObject
 
 class InspectionFacadeImpl(
@@ -347,7 +348,9 @@ class InspectionFacadeImpl(
             )
         }
         if (outcome.isSuccess) {
-            prefetchCorrectionDecoderInBackground()
+            withContext(Dispatchers.Default) {
+                correctionEngine?.prefetchDecoder()
+            }
         }
     }
 
@@ -356,56 +359,15 @@ class InspectionFacadeImpl(
     }
 
     override suspend fun inferInteractivePoint(x: Float, y: Float, imageWidth: Int, imageHeight: Int) {
-        if (_state.value.isInferring) return
-        val uri = currentImageUri ?: return updateStatus("请先导入图片")
-        if (correctionEngine?.isImageEncoded != true) {
-            prepareCorrectionState(uri, roi = null)
-        }
-        val mobileEngine = correctionEngine?.takeIf { it.isImageEncoded }
-        if (mobileEngine == null) {
-            updateStatus(
-                _state.value.statusMessage.trimEnd() +
-                    "\n局部修正尚未就绪，请等待「局部修正已就绪」后再点击",
-            )
-            return
-        }
-        val decoderReady = mobileEngine.isDecoderLoaded
-        _state.update {
-            it.copy(
-                isInferring = true,
-                statusMessage = if (decoderReady) "局部修正中…" else "首次点击：解码器加载中…",
-            )
-        }
-        val mappedX = x.coerceIn(0f, imageWidth.toFloat())
-        val mappedY = y.coerceIn(0f, imageHeight.toFloat())
-        val baseMaskPath = currentWorkingMaskPath()
-        val outcome = withContext(Dispatchers.Default) {
-            mobileEngine.inferPoint(
-                mappedX,
-                mappedY,
-                interactiveSessionDir,
-                baseMaskPath = baseMaskPath,
-            )
-        }
-        _state.update { current ->
-            outcome.fold(
-                onSuccess = { result ->
-                    current.copy(
-                        isInferring = false,
-                        lastMaskPath = (result as? InspectionResult.Segmentation)?.maskPath,
-                        maskUpdateSeq = current.maskUpdateSeq + 1,
-                        interactivePoints = current.interactivePoints + InteractivePoint(mappedX, mappedY),
-                        statusMessage = result.displayText() + "\n可继续点击或框选修正",
-                    )
-                },
-                onFailure = {
-                    current.copy(
-                        isInferring = false,
-                        statusMessage = "局部修正失败: ${it.message}",
-                    )
-                },
-            )
-        }
+        runInteractiveInference(
+            x = x,
+            y = y,
+            imageWidth = imageWidth,
+            imageHeight = imageHeight,
+            mergeRoi = null,
+            loadingMessage = "局部修正中…",
+            successSuffix = "可继续点击或框选修正",
+        )
     }
 
     override suspend fun selectCorrectionRoi(
@@ -417,7 +379,6 @@ class InspectionFacadeImpl(
         imageWidth: Int,
         imageHeight: Int,
     ) {
-        if (_state.value.isInferring) return
         currentImageUri = uri
         val box = MobileSamRoiBox.clamp(
             x1 = x1.toInt(),
@@ -427,77 +388,91 @@ class InspectionFacadeImpl(
             imageWidth = imageWidth,
             imageHeight = imageHeight,
         )
-        val currentMask = currentWorkingMaskPath()
-        if (currentMask == null) {
+        if (currentWorkingMaskPath() == null) {
             updateStatus("请先完成 Building 检测后再框选")
             return
         }
-        _state.update {
-            it.copy(
-                isInferring = true,
-                statusMessage = "正在应用框选…",
-            )
-        }
+        val promptX = (box.x1 + box.x2) / 2f
+        val promptY = (box.y1 + box.y2) / 2f
+        runInteractiveInference(
+            x = promptX,
+            y = promptY,
+            imageWidth = imageWidth,
+            imageHeight = imageHeight,
+            mergeRoi = box,
+            loadingMessage = "框选 SAM 修正中…",
+            successSuffix = "框内区域已叠加到原 mask，可继续点选补充",
+            recordInteractivePoint = false,
+        )
+    }
 
-        val boxApplied = withContext(Dispatchers.Default) {
-            runCatching {
-                MaskMerger.buildBoxSelectionFromMask(
-                    maskPath = currentMask,
-                    box = box,
-                    width = imageWidth,
-                    height = imageHeight,
-                )
-            }.getOrNull()
-        }
-        val minBoxPixels = (box.width * box.height * 0.002f).toInt().coerceIn(16, 512)
-        if (boxApplied != null && MaskMerger.countForegroundInBox(boxApplied, imageWidth, box) >= minBoxPixels) {
-            val maskFile = MaskWriter.maskFile(interactiveSessionDir)
-            withContext(Dispatchers.Default) {
-                MaskWriter.writeClassIndices(
-                    classIndices = boxApplied,
-                    width = imageWidth,
-                    height = imageHeight,
-                    outputFile = maskFile,
-                )
-            }
-            val ratio = MaskMerger.defectAreaRatio(boxApplied)
-            val (markerX, markerY) = MobileSamRoi.promptPointInBox(
-                maskFile = File(currentMask),
-                box = box,
-                imageWidth = imageWidth,
-                imageHeight = imageHeight,
-            )
-            _state.update { current ->
-                current.copy(
-                    isInferring = false,
-                    lastMaskPath = maskFile.absolutePath,
-                    maskUpdateSeq = current.maskUpdateSeq + 1,
-                    interactiveRoiActive = false,
-                    interactivePoints = current.interactivePoints + InteractivePoint(markerX, markerY),
-                    statusMessage = buildString {
-                        append("框选已合并：保留原 mask 并选中框内区域\n")
-                        append("目标区域占比: ${"%.2f".format(ratio * 100)}%\n")
-                        append("框内漏检可继续单击补充")
-                    },
-                )
-            }
-            prepareCorrectionState(uri, roi = null)
-            return
-        }
-
-        _state.update {
-            it.copy(statusMessage = "框内检测较少，改用 MobileSAM 点选补充…")
-        }
+    private suspend fun runInteractiveInference(
+        x: Float,
+        y: Float,
+        imageWidth: Int,
+        imageHeight: Int,
+        mergeRoi: MobileSamRoiBox?,
+        loadingMessage: String,
+        successSuffix: String,
+        recordInteractivePoint: Boolean = true,
+    ) {
+        if (_state.value.isInferring) return
+        val uri = currentImageUri ?: return updateStatus("请先导入图片")
         if (correctionEngine?.isImageEncoded != true) {
             prepareCorrectionState(uri, roi = null)
         }
-        val (promptX, promptY) = MobileSamRoi.promptPointInBox(
-            maskFile = File(currentMask),
-            box = box,
-            imageWidth = imageWidth,
-            imageHeight = imageHeight,
-        )
-        inferInteractivePoint(promptX, promptY, imageWidth, imageHeight)
+        val mobileEngine = correctionEngine?.takeIf { it.isImageEncoded }
+        if (mobileEngine == null) {
+            updateStatus(
+                _state.value.statusMessage.trimEnd() +
+                    "\n局部修正尚未就绪，请等待「局部修正已就绪」后再操作",
+            )
+            return
+        }
+        val decoderReady = mobileEngine.isDecoderLoaded
+        _state.update {
+            it.copy(
+                isInferring = true,
+                statusMessage = if (decoderReady) loadingMessage else "首次操作：解码器加载中…",
+            )
+        }
+        val mappedX = x.coerceIn(0f, imageWidth.toFloat())
+        val mappedY = y.coerceIn(0f, imageHeight.toFloat())
+        val baseMaskPath = currentWorkingMaskPath()
+        val outcome = withContext(Dispatchers.Default) {
+            withTimeoutOrNull(INTERACTIVE_SAM_TIMEOUT_MS) {
+                mobileEngine.inferPoint(
+                    mappedX,
+                    mappedY,
+                    interactiveSessionDir,
+                    baseMaskPath = baseMaskPath,
+                    mergeRoi = mergeRoi,
+                )
+            } ?: Result.failure(TimeoutException("SAM 推理超时，请重试"))
+        }
+        _state.update { current ->
+            outcome.fold(
+                onSuccess = { result ->
+                    current.copy(
+                        isInferring = false,
+                        lastMaskPath = (result as? InspectionResult.Segmentation)?.maskPath,
+                        maskUpdateSeq = current.maskUpdateSeq + 1,
+                        interactivePoints = if (recordInteractivePoint) {
+                            current.interactivePoints + InteractivePoint(mappedX, mappedY)
+                        } else {
+                            current.interactivePoints
+                        },
+                        statusMessage = result.displayText() + "\n$successSuffix",
+                    )
+                },
+                onFailure = {
+                    current.copy(
+                        isInferring = false,
+                        statusMessage = "局部修正失败: ${it.message}",
+                    )
+                },
+            )
+        }
     }
 
     override suspend fun runMobileSamDemo(demoName: String) {
@@ -1598,5 +1573,6 @@ class InspectionFacadeImpl(
         private const val INFERENCE_WAIT_MS = 180_000L
         private const val RECENT_RECORD_LIMIT = 5
         private const val MAX_AUTO_ANOMALIES = 50
+        private const val INTERACTIVE_SAM_TIMEOUT_MS = 90_000L
     }
 }

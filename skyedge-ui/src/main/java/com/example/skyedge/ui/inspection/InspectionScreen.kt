@@ -315,7 +315,7 @@ private fun CorrectionStatusBanner(
 ) {
     val (containerColor, text) = when {
         correctionEnabled -> Color(0xFFE8F5E9) to buildString {
-            append("✓ 可交互：单击=SAM 补漏（叠加）；框选=合并框内已有区域")
+            append("✓ 可交互：单击=SAM 补漏（叠加）；框选=SAM 框内补漏（叠加）")
             if (roiActive) append("（已按 Building 检测裁剪 ROI）")
         }
         preparingCorrection -> Color(0xFFFFF3E0) to "⏳ Building 已完成，正在编码修正区域（SAM 已在后台预热）…"
