@@ -109,6 +109,7 @@ class MobileSamInferenceEngine(
         outputDir: File,
         label: Int = 1,
         baseMaskPath: String? = null,
+        mergeRoi: MobileSamRoiBox? = null,
     ): Result<InspectionResult> = synchronized(lock) {
         runCatching {
             val state = cachedImage ?: error("请先导入图片并完成编码")
@@ -156,7 +157,13 @@ class MobileSamInferenceEngine(
             } else {
                 Triple(state.origWidth, state.origHeight, cropIndices)
             }
-            val roiBox = if (state.roiActive) {
+            validateSamSegment(
+                score = score,
+                classIndices = classIndices,
+                outputWidth = outputWidth,
+                mergeRoi = mergeRoi,
+            )
+            val roiBox = mergeRoi ?: if (state.roiActive) {
                 MobileSamRoiBox(
                     x1 = state.cropOffsetX,
                     y1 = state.cropOffsetY,
@@ -288,6 +295,36 @@ class MobileSamInferenceEngine(
         roiActive = roiActive,
         encodeMs = encodeMs,
     )
+
+    private fun validateSamSegment(
+        score: Float,
+        classIndices: IntArray,
+        outputWidth: Int,
+        mergeRoi: MobileSamRoiBox?,
+    ) {
+        if (score < MIN_SAM_SCORE) {
+            error("点击位置未识别到有效目标（置信度 ${"%.2f".format(score)}），请点在建筑上或框选区域")
+        }
+        val foreground = if (mergeRoi != null) {
+            MaskMerger.countForegroundInBox(classIndices, outputWidth, mergeRoi)
+        } else {
+            classIndices.count { it > 0 }
+        }
+        if (foreground < MIN_FOREGROUND_PIXELS) {
+            error("未识别到足够区域，请点在建筑边缘或拖拽框选")
+        }
+        val regionPixels = mergeRoi?.let { it.width * it.height } ?: classIndices.size
+        val regionRatio = foreground.toFloat() / regionPixels.toFloat().coerceAtLeast(1f)
+        if (regionRatio > MAX_REGION_FOREGROUND_RATIO) {
+            error("识别范围过大，请更精确地点击或缩小框选范围")
+        }
+    }
+
+    companion object {
+        private const val MIN_SAM_SCORE = 0.12f
+        private const val MIN_FOREGROUND_PIXELS = 24
+        private const val MAX_REGION_FOREGROUND_RATIO = 0.92f
+    }
 
     private fun Tensor.toClassIndices(
         origWidth: Int,

@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -91,8 +92,8 @@ import kotlin.math.min
  *  - 顶部：场景小标签 + 标题「建筑标注」 + 右上「人工核查」胶囊
  *  - 中部：全宽影像，绿 mask + 黄色 bbox 描边 + 黄色定位针
  *  - 拖拽 handle：分页指示条
- *  - 「建筑详情」白色卡片：编号 / 位置 / 疑似图斑位置 / 形式 / 人工复核 / 复核时间
- *  - 底部：保存校正 + 取消校正
+ *  - 「建筑详情」白色卡片：标题栏右侧保存校正 / 取消校正
+ *  - 编号 / 位置 / 疑似图斑位置 / 形式 / 人工复核 / 复核时间
  *
  * 不依赖场景二（灾害范围），由 [ReviewScreen] 调用方传入。
  */
@@ -186,23 +187,30 @@ fun ReviewScreen(
             AnnotationDetailCard(
                 anomaly = selected,
                 onUpdate = { viewModel.updateAnomaly(selected.id, it) },
-                onConfirm = { type, comment ->
-                    viewModel.reviewAnomaly(
-                        selected.id,
-                        ReviewAnomalyRequest(ReviewStatusUi.CONFIRMED, type, comment),
-                    )
-                },
-                onReject = {
-                    viewModel.reviewAnomaly(
-                        selected.id,
-                        ReviewAnomalyRequest(ReviewStatusUi.REJECTED, comment = "核验有误"),
-                    )
-                },
-                onSaveVerified = { type, comment ->
-                    viewModel.reviewAnomaly(
-                        selected.id,
-                        ReviewAnomalyRequest(ReviewStatusUi.VERIFIED, type, comment),
-                    )
+                onSaveReview = { type, comment, draftStatus ->
+                    val request = when (draftStatus) {
+                        ReviewStatusUi.REJECTED -> ReviewAnomalyRequest(
+                            ReviewStatusUi.REJECTED,
+                            type,
+                            comment.ifBlank { "核验有误" },
+                        )
+                        ReviewStatusUi.VERIFIED -> ReviewAnomalyRequest(
+                            ReviewStatusUi.VERIFIED,
+                            type,
+                            comment,
+                        )
+                        ReviewStatusUi.CONFIRMED -> ReviewAnomalyRequest(
+                            ReviewStatusUi.CONFIRMED,
+                            type,
+                            comment,
+                        )
+                        ReviewStatusUi.PENDING -> ReviewAnomalyRequest(
+                            ReviewStatusUi.CONFIRMED,
+                            type,
+                            comment,
+                        )
+                    }
+                    viewModel.reviewAnomaly(selected.id, request)
                 },
                 onTakePhoto = { onTakePhoto(selected.id) },
                 onCancel = { viewModel.selectAnomaly(null) },
@@ -487,9 +495,7 @@ private fun PagerIndicator(total: Int, current: Int) {
 private fun AnnotationDetailCard(
     anomaly: AnomalyUiModel,
     onUpdate: (AnomalyUpdateRequest) -> Unit,
-    onConfirm: (AnomalyTypeUi, String) -> Unit,
-    onReject: () -> Unit,
-    onSaveVerified: (AnomalyTypeUi, String) -> Unit,
+    onSaveReview: (AnomalyTypeUi, String, ReviewStatusUi) -> Unit,
     onTakePhoto: () -> Unit,
     onCancel: () -> Unit,
 ) {
@@ -506,14 +512,27 @@ private fun AnnotationDetailCard(
     var reviewStatus by remember(anomaly.id) { mutableStateOf(anomaly.reviewStatus) }
     val focusManager = LocalFocusManager.current
 
-    LaunchedEffect(code, location, comment, type, reviewStatus) {
+    LaunchedEffect(anomaly.id) {
+        code = anomaly.buildingCode
+        location = anomaly.location.ifBlank {
+            GeoAnomalyLocationResolver.fallbackPercentLabel(anomaly.bbox)
+        }
+        comment = anomaly.comment
+        type = anomaly.anomalyType
+        reviewStatus = anomaly.reviewStatus
+    }
+
+    LaunchedEffect(anomaly.reviewStatus) {
+        reviewStatus = anomaly.reviewStatus
+    }
+
+    LaunchedEffect(code, location, comment, type) {
         onUpdate(
             AnomalyUpdateRequest(
                 buildingCode = code,
                 location = location,
                 comment = comment,
                 anomalyType = type,
-                reviewStatus = reviewStatus,
             ),
         )
     }
@@ -537,21 +556,28 @@ private fun AnnotationDetailCard(
                     text = "建筑详情",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.weight(1f, fill = false),
                 )
-                if (anomaly.photoPaths.isNotEmpty()) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(
-                            modifier = Modifier
-                                .size(8.dp)
-                                .background(Color(0xFF4CAF50), CircleShape),
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            text = "附件 ${anomaly.photoPaths.size}",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = Color(0xFF4CAF50),
-                        )
-                    }
+                AnnotationDetailActions(
+                    savedStatus = anomaly.reviewStatus,
+                    draftStatus = reviewStatus,
+                    onCancel = onCancel,
+                    onSave = { onSaveReview(type, comment, reviewStatus) },
+                )
+            }
+            if (anomaly.photoPaths.isNotEmpty()) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .size(8.dp)
+                            .background(Color(0xFF4CAF50), CircleShape),
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = "附件 ${anomaly.photoPaths.size}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color(0xFF4CAF50),
+                    )
                 }
             }
 
@@ -675,54 +701,62 @@ private fun AnnotationDetailCard(
                 )
             }
 
-            HorizontalDivider()
+        }
+    }
+}
 
-            // 底部操作按钮：保存校正 + 取消校正
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-                OutlinedButton(
-                    onClick = onCancel,
-                    modifier = Modifier.weight(1f),
-                ) {
-                    Text("取消校正")
-                }
-                when (reviewStatus) {
-                    ReviewStatusUi.VERIFIED -> Button(
-                        onClick = { onSaveVerified(type, comment) },
-                        modifier = Modifier.weight(1f),
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF388E3C)),
-                    ) {
-                        Text("保存校正")
-                    }
-                    ReviewStatusUi.CONFIRMED -> Button(
-                        onClick = { onConfirm(type, comment) },
-                        modifier = Modifier.weight(1f),
-                        enabled = false,
-                    ) {
-                        Text("已标注")
-                    }
-                    ReviewStatusUi.REJECTED -> Button(
-                        onClick = { onReject() },
-                        modifier = Modifier.weight(1f),
-                        enabled = false,
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.errorContainer,
-                            contentColor = MaterialTheme.colorScheme.onErrorContainer,
-                        ),
-                    ) {
-                        Text("核验有误")
-                    }
-                    ReviewStatusUi.PENDING -> Button(
-                        onClick = { onConfirm(type, comment) },
-                        modifier = Modifier.weight(1f),
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF388E3C)),
-                    ) {
-                        Text("保存校正")
-                    }
-                }
-            }
+@Composable
+private fun AnnotationDetailActions(
+    savedStatus: ReviewStatusUi,
+    draftStatus: ReviewStatusUi,
+    onCancel: () -> Unit,
+    onSave: () -> Unit,
+) {
+    val compactPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
+    val alreadySaved = when (savedStatus) {
+        ReviewStatusUi.PENDING -> false
+        ReviewStatusUi.CONFIRMED -> draftStatus == ReviewStatusUi.CONFIRMED ||
+            draftStatus == ReviewStatusUi.VERIFIED
+        ReviewStatusUi.VERIFIED -> draftStatus == ReviewStatusUi.VERIFIED ||
+            draftStatus == ReviewStatusUi.CONFIRMED
+        ReviewStatusUi.REJECTED -> draftStatus == ReviewStatusUi.REJECTED
+    }
+    val saveLabel = when {
+        alreadySaved && savedStatus == ReviewStatusUi.REJECTED -> "核验有误"
+        alreadySaved -> "已保存"
+        draftStatus == ReviewStatusUi.REJECTED -> "确认排除"
+        else -> "保存校正"
+    }
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        OutlinedButton(
+            onClick = onCancel,
+            contentPadding = compactPadding,
+        ) {
+            Text("取消", style = MaterialTheme.typography.labelLarge)
+        }
+        Button(
+            onClick = onSave,
+            enabled = !alreadySaved,
+            contentPadding = compactPadding,
+            colors = when {
+                alreadySaved && savedStatus == ReviewStatusUi.REJECTED -> ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.errorContainer,
+                    contentColor = MaterialTheme.colorScheme.onErrorContainer,
+                    disabledContainerColor = MaterialTheme.colorScheme.errorContainer,
+                    disabledContentColor = MaterialTheme.colorScheme.onErrorContainer,
+                )
+                alreadySaved -> ButtonDefaults.buttonColors(
+                    containerColor = Color(0xFF388E3C),
+                    disabledContainerColor = Color(0xFF388E3C),
+                    disabledContentColor = Color.White.copy(alpha = 0.8f),
+                )
+                else -> ButtonDefaults.buttonColors(containerColor = Color(0xFF388E3C))
+            },
+        ) {
+            Text(saveLabel, style = MaterialTheme.typography.labelLarge)
         }
     }
 }
