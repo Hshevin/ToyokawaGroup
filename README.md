@@ -165,7 +165,7 @@ MobileSAM 交付包与 demo 见 `skyedge_mobilesam_delivery/`；导出 / FP8 脚
 ├── imgrecord/                         # Room + ImageRecordRepository
 ├── skyedge_mobilesam_delivery/        # MobileSAM 算法交付与 demo
 ├── openapi/api.yaml                   # Facade / JSON 契约
-├── docs/                              # 架构、交付清单、优化报告、MVP 测试报告
+├── docs/                              # 架构、论文实验设计、交付清单、优化报告、MVP 测试报告
 ├── tools/                             # 剪枝 / FP8 / MobileSAM 导出脚本
 ├── geotiff_map_test_samples/          # 地图测试样例（不进 APK）
 └── skyedge_vm_test_images/            # Building 验收图
@@ -239,7 +239,6 @@ pip install -r tools/requirements-export.txt   # MobileSAM 导出
 
 | 脚本 | 用途 |
 |------|------|
-| `tools/benchmark_torchscript_models.py` | 对比各 `.pt` 体积与 CPU 时延 |
 | `tools/quantize_fp8_unet.py` | Building U-Net FP8 量化 |
 | `tools/export_mobile_sam_torchscript.py` | MobileSAM encoder/decoder TorchScript 导出 |
 | `tools/quantize_fp8_mobile_sam.py` | MobileSAM FP8 量化与验收 |

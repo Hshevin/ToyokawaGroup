@@ -28,6 +28,9 @@ class PytorchInferenceEngine(
     override val loadedModelVersion: String?
         get() = loadedAssetName
 
+    val loadedModelId: String
+        get() = spec.modelId
+
     private val lock = Any()
 
     override fun load(modelSpecAsset: String?): Result<Unit> = synchronized(lock) {
@@ -36,23 +39,38 @@ class PytorchInferenceEngine(
         module = null
         loadedAssetName = null
         spec = ModelSpecLoader.load(context, modelSpecAsset)
-        val assetFile = spec.assetFile ?: error("model_spec 缺少 asset_file")
+        val assetFile = ModelLoader.resolveAssetPath(modelSpecAsset, spec.assetFile ?: error("model_spec 缺少 asset_file"))
+        val runtimeFromSpec = spec.quantizationRuntimeAsset?.let {
+            ModelLoader.resolveAssetPath(modelSpecAsset, it)
+        }
         if (assetFile.endsWith(".fp8pkg")) {
-            val runtimeAsset = assetFile.removeSuffix(".fp8pkg") + "_runtime.pt"
+            val runtimeAsset = runtimeFromSpec ?: (assetFile.removeSuffix(".fp8pkg") + "_runtime.pt")
             check(ModelLoader.assetExists(context, assetFile)) { "模型文件不存在: $assetFile" }
             check(ModelLoader.assetExists(context, runtimeAsset)) { "FP8 运行时模型不存在: $runtimeAsset" }
         } else {
             check(ModelLoader.assetExists(context, assetFile)) { "模型文件不存在: $assetFile" }
         }
-        module = Module.load(ModelLoader.resolveModelAsset(context, assetFile, modelCacheToken(spec)))
+        val cacheToken = modelCacheToken(spec, assetFile, runtimeFromSpec)
+        module = Module.load(ModelLoader.resolveModelAsset(context, assetFile, cacheToken))
         loadedAssetName = assetFile
         }
     }
 
-    private fun modelCacheToken(spec: LoadedModelSpec): String {
-        val asset = spec.assetFile ?: return spec.modelId
-        val runtime = spec.quantizationRuntimeAsset
-        return if (runtime.isNullOrBlank()) asset else "$asset|$runtime"
+    private fun modelCacheToken(
+        spec: LoadedModelSpec,
+        resolvedAsset: String,
+        resolvedRuntime: String?,
+    ): String {
+        val parts = mutableListOf(
+            spec.modelId,
+            resolvedAsset,
+            ModelLoader.assetLength(context, resolvedAsset).toString(),
+        )
+        if (!resolvedRuntime.isNullOrBlank()) {
+            parts += resolvedRuntime
+            parts += ModelLoader.assetLength(context, resolvedRuntime).toString()
+        }
+        return parts.joinToString("|")
     }
 
     override fun infer(bitmap: Bitmap): Result<InspectionResult> = synchronized(lock) {

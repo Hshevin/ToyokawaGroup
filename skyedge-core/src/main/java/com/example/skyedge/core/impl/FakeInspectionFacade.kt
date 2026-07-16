@@ -244,13 +244,6 @@ class FakeInspectionFacade(
 
     override suspend fun refreshAnomalyLocations() = Unit
 
-    override suspend fun benchmark(uri: Uri, runs: Int) {
-        _state.value = _state.value.copy(
-            isInferring = false,
-            statusMessage = "基准测试完成（Fake，$runs 次）",
-        )
-    }
-
     override fun refreshHistory() = Unit
 
     override fun close() = Unit

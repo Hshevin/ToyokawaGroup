@@ -246,6 +246,11 @@ data class ModelChoice(
             label = "Building",
             specAsset = "models/building_unet_efficientnetb0_v1/model_spec.json",
         )
+        val ROAD = ModelChoice(
+            key = "road",
+            label = "Road",
+            specAsset = "models/road_unet_efficientnetb0_v1/model_spec.json",
+        )
         val MOBILE_SAM = ModelChoice(
             key = "mobile_sam",
             label = "MobileSAM",
@@ -253,7 +258,7 @@ data class ModelChoice(
         )
 
         /** 检测页可见模型；MobileSAM 作为 Building 检测后的修正引擎，不在 UI 切换。 */
-        val ALL = listOf(BUILDING)
+        val ALL = listOf(BUILDING, ROAD)
 
         fun fromKey(key: String): ModelChoice = ALL.firstOrNull { it.key == key } ?: BUILDING
     }
@@ -304,7 +309,6 @@ interface InspectionFacade {
     fun clearMapSession()
     fun selectAnomaly(id: String?)
     suspend fun refreshAnomalyLocations()
-    suspend fun benchmark(uri: Uri, runs: Int = 10)
     fun refreshHistory()
     fun close()
 }

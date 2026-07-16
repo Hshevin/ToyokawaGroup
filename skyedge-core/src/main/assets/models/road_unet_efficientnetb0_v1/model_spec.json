@@ -1,0 +1,43 @@
+{
+  "model_id": "rd_qp_q1_p1s2_v1",
+  "asset_file": "models/road_unet_efficientnetb0_v1/optimized/rd_qp_q1_p1s2_v1_android.pt",
+  "task_type": "segmentation",
+  "target": "road",
+  "input": {
+    "layout": "NCHW",
+    "height": 512,
+    "width": 512,
+    "mean": [
+      0.485,
+      0.456,
+      0.406
+    ],
+    "std": [
+      0.229,
+      0.224,
+      0.225
+    ],
+    "rgb_order": "RGB",
+    "dtype": "float32"
+  },
+  "output": {
+    "type": "binary_segmentation_logits",
+    "shape": [
+      1,
+      1,
+      512,
+      512
+    ],
+    "postprocess": "sigmoid_threshold",
+    "threshold": 0.75
+  },
+  "num_classes": 2,
+  "class_names": [
+    "background",
+    "road"
+  ],
+  "source_exp_module": "QP",
+  "quant_method": "Q1",
+  "prune_method": "unstructured_l1",
+  "prune_tier": "S2"
+}

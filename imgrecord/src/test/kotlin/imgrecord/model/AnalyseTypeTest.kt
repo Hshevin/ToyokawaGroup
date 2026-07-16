@@ -11,8 +11,8 @@ class AnalyseTypeTest {
     }
 
     @Test
-    fun fromInt_legacyRoadValue_defaultsToBuilding() {
-        assertEquals(AnalyseType.BUILDING, AnalyseType.fromInt(1))
+    fun fromInt_returnsRoad() {
+        assertEquals(AnalyseType.ROAD, AnalyseType.fromInt(1))
     }
 
     @Test

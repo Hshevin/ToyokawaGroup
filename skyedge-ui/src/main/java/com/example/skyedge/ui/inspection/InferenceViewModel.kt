@@ -196,12 +196,6 @@ class InferenceViewModel @JvmOverloads constructor(
         facade.refreshHistory()
     }
 
-    fun benchmarkCurrentImage(uri: Uri, runs: Int = 10) {
-        viewModelScope.launch {
-            facade.benchmark(uri, runs)
-        }
-    }
-
     override fun onCleared() {
         facade.close()
         super.onCleared()
