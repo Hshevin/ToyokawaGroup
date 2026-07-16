@@ -96,7 +96,7 @@ class InspectionFacadeImpl(
     correctionEngineFactory: (() -> MobileSamInferenceEngine)? = null,
 ) : InspectionFacade {
 
-    private val buildingEngine: PytorchInferenceEngine =
+    private val segmentationEngine: PytorchInferenceEngine =
         buildingEngineFactory?.invoke() ?: PytorchInferenceEngine(context)
     private var correctionEngine: MobileSamInferenceEngine? =
         correctionEngineFactory?.invoke()
@@ -111,7 +111,7 @@ class InspectionFacadeImpl(
     private fun createRepository(): ImageRecordRepository = ImageRecordRepository(
         context = context,
         localUrlPrefix = context.filesDir.absolutePath + "/analysis",
-        analyser = SkyEdgeImageAnalyser(context, buildingEngine),
+        analyser = SkyEdgeImageAnalyser(context, segmentationEngine),
         scope = scope,
     )
     private val taskRepository = TaskRepository(context)
@@ -123,23 +123,37 @@ class InspectionFacadeImpl(
     override val modelChoices: List<ModelChoice> = ModelChoice.ALL
 
     init {
+        wipePaperBenchmarkResidue()
         loadModel()
         refreshHistory()
         refreshTasks()
     }
 
+    /** Remove leftover multi-run latency exports from paper experiments. */
+    private fun wipePaperBenchmarkResidue() {
+        runCatching {
+            listOfNotNull(
+                context.getExternalFilesDir(null)?.let { File(it, "paper_benchmark") },
+                File(context.filesDir, "paper_benchmark"),
+            ).forEach { dir ->
+                if (dir.exists()) dir.deleteRecursively()
+            }
+        }
+    }
+
     override fun loadModel(modelKey: String) {
+        val choice = ModelChoice.fromKey(modelKey)
         scope.launch {
             _state.update {
                 it.copy(
                     isLoadingModel = true,
                     isModelReady = false,
-                    statusMessage = "正在加载 Building 模型…",
-                    selectedModelKey = ModelChoice.BUILDING.key,
+                    statusMessage = "正在加载 ${choice.label} 模型…",
+                    selectedModelKey = choice.key,
                 )
             }
             val result = withContext(Dispatchers.Default) {
-                buildingEngine.load(ModelChoice.BUILDING.specAsset)
+                segmentationEngine.load(choice.specAsset)
             }
             _state.update { current ->
                 result.fold(
@@ -147,12 +161,12 @@ class InspectionFacadeImpl(
                         scheduleCorrectionEnginePreload()
                         current.copy(
                             statusMessage = buildString {
-                                append("Building 模型就绪\n")
+                                append("${choice.label} 模型就绪\n")
                                 append("导入图片后自动分割，可直接点击或框选局部修正")
                             },
                             isLoadingModel = false,
                             isModelReady = true,
-                            selectedModelKey = ModelChoice.BUILDING.key,
+                            selectedModelKey = choice.key,
                             interactiveImageReady = false,
                             interactivePoints = emptyList(),
                         )
@@ -162,7 +176,7 @@ class InspectionFacadeImpl(
                             statusMessage = "模型加载失败: ${it.message}",
                             isLoadingModel = false,
                             isModelReady = false,
-                            selectedModelKey = ModelChoice.BUILDING.key,
+                            selectedModelKey = choice.key,
                             interactiveImageReady = false,
                             interactivePoints = emptyList(),
                         )
@@ -173,7 +187,8 @@ class InspectionFacadeImpl(
     }
 
     override fun switchModel(modelKey: String) {
-        if (modelKey != ModelChoice.BUILDING.key) return
+        val choice = ModelChoice.fromKey(modelKey)
+        if (_state.value.selectedModelKey == choice.key && segmentationEngine.isReady) return
         loadModel(modelKey)
     }
 
@@ -184,10 +199,11 @@ class InspectionFacadeImpl(
     override suspend fun infer(uri: Uri) {
         if (_state.value.isInferring) return
         currentImageUri = uri
+        val modelLabel = ModelChoice.fromKey(_state.value.selectedModelKey).label
         _state.update {
             it.copy(
                 isInferring = true,
-                statusMessage = "Building 推理中…",
+                statusMessage = "$modelLabel 推理中…",
                 lastMaskPath = null,
                 buildingMaskPath = null,
                 interactiveImageReady = false,
@@ -571,11 +587,22 @@ class InspectionFacadeImpl(
                 val sessionId = UUID.randomUUID().toString()
                 val sessionDir = File(context.filesDir, "${ModelSpec.ANALYSIS_DIR}/$sessionId").apply { mkdirs() }
                 val sourceFile = File(sessionDir, "source.tiff")
+                val expectedSize = context.contentResolver.openFileDescriptor(uri, "r")?.use { descriptor ->
+                    descriptor.statSize
+                } ?: -1L
                 context.contentResolver.openInputStream(uri)?.use { input ->
                     FileOutputStream(sourceFile).use { output -> input.copyTo(output) }
                 } ?: error("无法读取 GeoTIFF: $uri")
 
-                val loaded = GeoTiffReader.decode(sourceFile.readBytes())
+                val bytes = sourceFile.readBytes()
+                if (expectedSize > 0 && bytes.size.toLong() != expectedSize) {
+                    error(
+                        "GeoTIFF 文件未完整读取（已复制 ${bytes.size} 字节，期望 $expectedSize 字节）。" +
+                            "请从 Download 重新选择 .tif 文件",
+                    )
+                }
+
+                val loaded = GeoTiffReader.decode(bytes)
                 val previewFile = File(sessionDir, "preview.png")
                 FileOutputStream(previewFile).use { out ->
                     loaded.previewBitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
@@ -743,7 +770,7 @@ class InspectionFacadeImpl(
     }
 
     override suspend fun listAnomalies(taskId: String): List<AnomalyUiModel> = withContext(Dispatchers.IO) {
-        anomalyRepository.listByTask(taskId).map { it.toUi() }
+        anomalyRepository.listByTask(taskId).map { enrichAnomalyLocation(it).toUi() }
     }
 
     override suspend fun submitAnomaly(request: SubmitAnomalyRequest): String = withContext(Dispatchers.IO) {
@@ -794,12 +821,20 @@ class InspectionFacadeImpl(
 
     override suspend fun updateAnomaly(id: String, fields: AnomalyUpdateRequest) {
         withContext(Dispatchers.IO) {
+            val current = anomalyRepository.get(id)
+            val location = fields.location?.let { requested ->
+                if (current != null && GeoAnomalyLocationResolver.looksLikePercentFallback(requested)) {
+                    resolveGeoLocationLabel(current) ?: requested
+                } else {
+                    requested
+                }
+            }
             val updated = anomalyRepository.updateFields(
                 id = id,
                 anomalyType = fields.anomalyType?.toModel(),
                 reviewStatus = fields.reviewStatus?.toModel(),
                 buildingCode = fields.buildingCode,
-                location = fields.location,
+                location = location,
                 comment = fields.comment,
                 severity = fields.severity,
                 bbox = fields.bbox?.toModel(),
@@ -949,6 +984,19 @@ class InspectionFacadeImpl(
         _state.update { it.copy(selectedAnomalyId = id) }
     }
 
+    override suspend fun refreshAnomalyLocations() {
+        val taskId = _state.value.activeTask?.id ?: return
+        withContext(Dispatchers.IO) {
+            imageRecordRepository.queryByTaskId(taskId).forEach { record ->
+                if (record.status != AnalyseStatus.DONE || record.analyseType != AnalyseType.BUILDING) return@forEach
+                val maskPath = SkyEdgeImageAnalyser.maskPathFromSummary(record.summaryJson) ?: return@forEach
+                backfillAnomalyLocationsForImage(record, maskPath)
+            }
+            anomalyRepository.listByTask(taskId).forEach { enrichAnomalyLocation(it) }
+            refreshTaskState(taskId)
+        }
+    }
+
     override fun refreshHistory() {
         scope.launch {
             val recent = withContext(Dispatchers.IO) { loadRecentRecords() }
@@ -956,69 +1004,8 @@ class InspectionFacadeImpl(
         }
     }
 
-    override suspend fun benchmark(uri: Uri, runs: Int) {
-        if (!buildingEngine.isReady || _state.value.isInferring || runs <= 0) return
-        _state.update {
-            it.copy(
-                isInferring = true,
-                statusMessage = "基准测试中…（$runs 次）",
-                lastMaskPath = null,
-            )
-        }
-        val localIdPrefix = UUID.randomUUID().toString()
-        val outcome = withContext(Dispatchers.Default) {
-            val bitmap = ImagePreprocessor.loadOrientedBitmap(context, uri)
-                ?: return@withContext Result.failure<BenchmarkOutcome>(
-                    IllegalStateException("无法读取图片"),
-                )
-            runCatching {
-                val msList = mutableListOf<Long>()
-                var lastResult: InspectionResult? = null
-                repeat(runs) { idx ->
-                    val result = buildingEngine.infer(bitmap, "${localIdPrefix}_$idx").getOrThrow()
-                    msList += result.inferenceMsOrNull
-                        ?: throw IllegalStateException("无法读取推理耗时")
-                    lastResult = result
-                }
-                bitmap.recycle()
-                val sorted = msList.sorted()
-                BenchmarkOutcome(
-                    avgMs = msList.average(),
-                    p90Ms = sorted[(sorted.size * 0.9).toInt().coerceAtLeast(1) - 1],
-                    timesMs = msList,
-                    lastResult = lastResult ?: error("缺少推理结果"),
-                )
-            }
-        }
-        _state.update { current ->
-            outcome.fold(
-                onSuccess = { done ->
-                    val summary = buildString {
-                        append("基准测试完成（$runs 次）\n")
-                        append("模型: ${buildingEngine.loadedModelVersion ?: "unknown"}\n")
-                        append("avg: ${"%.1f".format(done.avgMs)} ms\n")
-                        append("p90: ${done.p90Ms} ms\n")
-                        append("times: ${done.timesMs.joinToString(",")}")
-                    }
-                    current.copy(
-                        isInferring = false,
-                        lastMaskPath = (done.lastResult as? InspectionResult.Segmentation)?.maskPath,
-                        maskUpdateSeq = current.maskUpdateSeq + 1,
-                        statusMessage = "${done.lastResult.displayText()}\n$summary",
-                    )
-                },
-                onFailure = {
-                    current.copy(
-                        isInferring = false,
-                        statusMessage = "基准测试失败: ${it.message}",
-                    )
-                },
-            )
-        }
-    }
-
     override fun close() {
-        buildingEngine.close()
+        segmentationEngine.close()
         correctionEngine?.close()
         correctionEngine = null
     }
@@ -1045,7 +1032,7 @@ class InspectionFacadeImpl(
     private suspend fun refreshTaskState(activeTaskId: String?) {
         val tasks = loadTasksWithStats()
         val active = activeTaskId?.let { id -> tasks.firstOrNull { it.id == id } } ?: tasks.firstOrNull()
-        val anomalies = active?.let { anomalyRepository.listByTask(it.id).map { record -> record.toUi() } }.orEmpty()
+        val anomalies = active?.let { anomalyRepository.listByTask(it.id).map { record -> enrichAnomalyLocation(record).toUi() } }.orEmpty()
         val draft = active?.let { buildReportDraft(it.id) }
         _state.update {
             it.copy(
@@ -1067,13 +1054,16 @@ class InspectionFacadeImpl(
 
     private suspend fun loadActiveAnomalies(): List<AnomalyUiModel> =
         _state.value.activeTask?.let { active ->
-            anomalyRepository.listByTask(active.id).map { it.toUi() }
+            anomalyRepository.listByTask(active.id).map { enrichAnomalyLocation(it).toUi() }
         }.orEmpty()
 
     private suspend fun createDraftAnomaliesIfNeeded(taskId: String, record: ImageRecord) {
         if (record.status != AnalyseStatus.DONE || record.analyseType != AnalyseType.BUILDING) return
-        if (anomalyRepository.listByImage(record.localUrl).isNotEmpty()) return
         val maskPath = SkyEdgeImageAnalyser.maskPathFromSummary(record.summaryJson) ?: return
+        if (anomalyRepository.listByImage(record.localUrl).isNotEmpty()) {
+            backfillAnomalyLocationsForImage(record, maskPath)
+            return
+        }
         val instances = MaskInstanceExtractor.extract(maskPath)
             .sortedByDescending { it.pixelArea }
             .take(MAX_AUTO_ANOMALIES)
@@ -1093,6 +1083,19 @@ class InspectionFacadeImpl(
         }
         if (instances.isNotEmpty()) {
             taskRepository.updateStatus(taskId, TaskStatus.MANUAL_REVIEW)
+        }
+    }
+
+    /** Re-resolve percent-only locations when geo.json is present (e.g. after GeoTIFF import or app upgrade). */
+    private suspend fun backfillAnomalyLocationsForImage(record: ImageRecord, maskPath: String) {
+        val sessionDir = File(record.localUrl.trimEnd(File.separatorChar))
+        if (!GeoJsonIO.geoFile(sessionDir).exists()) return
+        anomalyRepository.listByImage(record.localUrl).forEach { anomaly ->
+            if (!GeoAnomalyLocationResolver.looksLikePercentFallback(anomaly.location)) return@forEach
+            val resolved = resolveAnomalyLocation(record, anomaly.bbox.toUi(), maskPath)
+            if (!GeoAnomalyLocationResolver.looksLikePercentFallback(resolved)) {
+                anomalyRepository.updateFields(anomaly.id, location = resolved)
+            }
         }
     }
 
@@ -1265,7 +1268,10 @@ class InspectionFacadeImpl(
             .take(RECENT_RECORD_LIMIT)
             .map { it.toItem() }
 
-    private fun selectedAnalyseType(): AnalyseType = AnalyseType.BUILDING
+    private fun selectedAnalyseType(): AnalyseType = when (_state.value.selectedModelKey) {
+        ModelChoice.ROAD.key -> AnalyseType.ROAD
+        else -> AnalyseType.BUILDING
+    }
 
     private fun GeoBounds.toDto(): GeoBoundsDto =
         GeoBoundsDto(
@@ -1450,6 +1456,21 @@ class InspectionFacadeImpl(
     private fun BoundingBoxDto.autoLocationLabel(): String =
         GeoAnomalyLocationResolver.fallbackPercentLabel(this)
 
+    private suspend fun enrichAnomalyLocation(record: AnomalyRecord): AnomalyRecord {
+        if (!GeoAnomalyLocationResolver.looksLikePercentFallback(record.location)) return record
+        val resolved = resolveGeoLocationLabel(record) ?: return record
+        anomalyRepository.updateFields(record.id, location = resolved)
+        return record.copy(location = resolved)
+    }
+
+    private suspend fun resolveGeoLocationLabel(record: AnomalyRecord): String? {
+        val imageLocalUrl = record.imageLocalUrl?.takeIf { it.isNotBlank() } ?: return null
+        val imageRecord = imageRecordRepository.queryByLocalUrl(imageLocalUrl) ?: return null
+        val maskPath = SkyEdgeImageAnalyser.maskPathFromSummary(imageRecord.summaryJson)
+        val resolved = resolveAnomalyLocation(imageRecord, record.bbox.toUi(), maskPath)
+        return resolved.takeUnless { GeoAnomalyLocationResolver.looksLikePercentFallback(it) }
+    }
+
     private fun BoundingBoxRecord.toUi(): BoundingBoxDto =
         BoundingBoxDto(x, y, width, height)
 
@@ -1540,13 +1561,6 @@ class InspectionFacadeImpl(
                     }
                 },
             )
-
-    private data class BenchmarkOutcome(
-        val avgMs: Double,
-        val p90Ms: Long,
-        val timesMs: List<Long>,
-        val lastResult: InspectionResult,
-    )
 
     private data class MapInferOutcome(
         val record: ImageRecord,

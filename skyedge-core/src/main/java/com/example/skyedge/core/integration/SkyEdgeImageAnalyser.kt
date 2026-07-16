@@ -99,6 +99,7 @@ class SkyEdgeImageAnalyser(
 
     private fun specAssetFor(analyseType: AnalyseType): String = when (analyseType) {
         AnalyseType.BUILDING -> ModelChoice.BUILDING.specAsset
+        AnalyseType.ROAD -> ModelChoice.ROAD.specAsset
     }
 
     companion object {
