@@ -40,7 +40,6 @@ fun ImageScreen(
     onPickImage: () -> Unit,
     onOpenGeoTiff: () -> Unit,
     onLoadSample: (String) -> Unit,
-    onBenchmark: () -> Unit,
     isAmapKeyConfigured: Boolean,
     modifier: Modifier = Modifier,
 ) {
@@ -108,9 +107,6 @@ fun ImageScreen(
                 onPickImage = onPickImage,
                 embedded = true,
             )
-            OutlinedButton(onClick = onBenchmark, enabled = !uiState.isInferring) {
-                Text("当前图连跑 10 次")
-            }
         }
         uiState.mapSession?.let {
             Text("GeoTIFF 会话：${it.sessionId} · ${if (it.maskOverlayPath == null) "待检测" else "已生成 mask 图层"}")

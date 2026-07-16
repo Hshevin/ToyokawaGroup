@@ -33,5 +33,17 @@ test_img/
 __pycache__/
 *.pyc
 
+# Paper experiment — large assets and raw run dumps
+paper_experiment/data/**
+!paper_experiment/data/.gitkeep
+!paper_experiment/data/road/**/.gitkeep
+paper_experiment/models/**/*.pth
+paper_experiment/models/**/*.pt
+paper_experiment/models/**/*.fp8pkg
+paper_experiment/models/**/*.ptl
+paper_experiment/runs/**/per_image.jsonl
+paper_experiment/runs/**/latency_samples.json
+!paper_experiment/runs/_example/**
+
 # IDE (local only)
 .idea/deviceManager.xml

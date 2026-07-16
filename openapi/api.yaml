@@ -1151,12 +1151,10 @@ x-inProcessApi:
       summary: 清除当前地图会话状态
       restEquivalent: null
       kotlin: fun clearMapSession()
-    benchmark:
-      summary: 当前图连跑 N 次测时延
-      restEquivalent: null
     refreshHistory:
       summary: 刷新最近检测记录
       restEquivalent: GET /tasks/{taskId}/images
+      kotlin: fun refreshHistory()
     close:
       summary: 释放 PyTorch 模块
       restEquivalent: null

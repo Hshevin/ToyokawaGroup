@@ -172,9 +172,6 @@ class MainActivity : ComponentActivity() {
                             selectedImageUri = uri
                             viewModel.infer(uri)
                         },
-                        onBenchmark = {
-                            selectedImageUri?.let { viewModel.benchmarkCurrentImage(it, runs = 10) }
-                        },
                         isAmapKeyConfigured = hasAmapApiKey(),
                         modifier = Modifier.padding(innerPadding),
                     )

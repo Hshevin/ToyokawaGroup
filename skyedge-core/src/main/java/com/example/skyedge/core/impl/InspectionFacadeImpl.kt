@@ -96,7 +96,7 @@ class InspectionFacadeImpl(
     correctionEngineFactory: (() -> MobileSamInferenceEngine)? = null,
 ) : InspectionFacade {
 
-    private val buildingEngine: PytorchInferenceEngine =
+    private val segmentationEngine: PytorchInferenceEngine =
         buildingEngineFactory?.invoke() ?: PytorchInferenceEngine(context)
     private var correctionEngine: MobileSamInferenceEngine? =
         correctionEngineFactory?.invoke()
@@ -111,7 +111,7 @@ class InspectionFacadeImpl(
     private fun createRepository(): ImageRecordRepository = ImageRecordRepository(
         context = context,
         localUrlPrefix = context.filesDir.absolutePath + "/analysis",
-        analyser = SkyEdgeImageAnalyser(context, buildingEngine),
+        analyser = SkyEdgeImageAnalyser(context, segmentationEngine),
         scope = scope,
     )
     private val taskRepository = TaskRepository(context)
@@ -123,23 +123,37 @@ class InspectionFacadeImpl(
     override val modelChoices: List<ModelChoice> = ModelChoice.ALL
 
     init {
+        wipePaperBenchmarkResidue()
         loadModel()
         refreshHistory()
         refreshTasks()
     }
 
+    /** Remove leftover multi-run latency exports from paper experiments. */
+    private fun wipePaperBenchmarkResidue() {
+        runCatching {
+            listOfNotNull(
+                context.getExternalFilesDir(null)?.let { File(it, "paper_benchmark") },
+                File(context.filesDir, "paper_benchmark"),
+            ).forEach { dir ->
+                if (dir.exists()) dir.deleteRecursively()
+            }
+        }
+    }
+
     override fun loadModel(modelKey: String) {
+        val choice = ModelChoice.fromKey(modelKey)
         scope.launch {
             _state.update {
                 it.copy(
                     isLoadingModel = true,
                     isModelReady = false,
-                    statusMessage = "正在加载 Building 模型…",
-                    selectedModelKey = ModelChoice.BUILDING.key,
+                    statusMessage = "正在加载 ${choice.label} 模型…",
+                    selectedModelKey = choice.key,
                 )
             }
             val result = withContext(Dispatchers.Default) {
-                buildingEngine.load(ModelChoice.BUILDING.specAsset)
+                segmentationEngine.load(choice.specAsset)
             }
             _state.update { current ->
                 result.fold(
@@ -147,12 +161,12 @@ class InspectionFacadeImpl(
                         scheduleCorrectionEnginePreload()
                         current.copy(
                             statusMessage = buildString {
-                                append("Building 模型就绪\n")
+                                append("${choice.label} 模型就绪\n")
                                 append("导入图片后自动分割，可直接点击或框选局部修正")
                             },
                             isLoadingModel = false,
                             isModelReady = true,
-                            selectedModelKey = ModelChoice.BUILDING.key,
+                            selectedModelKey = choice.key,
                             interactiveImageReady = false,
                             interactivePoints = emptyList(),
                         )
@@ -162,7 +176,7 @@ class InspectionFacadeImpl(
                             statusMessage = "模型加载失败: ${it.message}",
                             isLoadingModel = false,
                             isModelReady = false,
-                            selectedModelKey = ModelChoice.BUILDING.key,
+                            selectedModelKey = choice.key,
                             interactiveImageReady = false,
                             interactivePoints = emptyList(),
                         )
@@ -173,7 +187,8 @@ class InspectionFacadeImpl(
     }
 
     override fun switchModel(modelKey: String) {
-        if (modelKey != ModelChoice.BUILDING.key) return
+        val choice = ModelChoice.fromKey(modelKey)
+        if (_state.value.selectedModelKey == choice.key && segmentationEngine.isReady) return
         loadModel(modelKey)
     }
 
@@ -184,10 +199,11 @@ class InspectionFacadeImpl(
     override suspend fun infer(uri: Uri) {
         if (_state.value.isInferring) return
         currentImageUri = uri
+        val modelLabel = ModelChoice.fromKey(_state.value.selectedModelKey).label
         _state.update {
             it.copy(
                 isInferring = true,
-                statusMessage = "Building 推理中…",
+                statusMessage = "$modelLabel 推理中…",
                 lastMaskPath = null,
                 buildingMaskPath = null,
                 interactiveImageReady = false,
@@ -988,69 +1004,8 @@ class InspectionFacadeImpl(
         }
     }
 
-    override suspend fun benchmark(uri: Uri, runs: Int) {
-        if (!buildingEngine.isReady || _state.value.isInferring || runs <= 0) return
-        _state.update {
-            it.copy(
-                isInferring = true,
-                statusMessage = "基准测试中…（$runs 次）",
-                lastMaskPath = null,
-            )
-        }
-        val localIdPrefix = UUID.randomUUID().toString()
-        val outcome = withContext(Dispatchers.Default) {
-            val bitmap = ImagePreprocessor.loadOrientedBitmap(context, uri)
-                ?: return@withContext Result.failure<BenchmarkOutcome>(
-                    IllegalStateException("无法读取图片"),
-                )
-            runCatching {
-                val msList = mutableListOf<Long>()
-                var lastResult: InspectionResult? = null
-                repeat(runs) { idx ->
-                    val result = buildingEngine.infer(bitmap, "${localIdPrefix}_$idx").getOrThrow()
-                    msList += result.inferenceMsOrNull
-                        ?: throw IllegalStateException("无法读取推理耗时")
-                    lastResult = result
-                }
-                bitmap.recycle()
-                val sorted = msList.sorted()
-                BenchmarkOutcome(
-                    avgMs = msList.average(),
-                    p90Ms = sorted[(sorted.size * 0.9).toInt().coerceAtLeast(1) - 1],
-                    timesMs = msList,
-                    lastResult = lastResult ?: error("缺少推理结果"),
-                )
-            }
-        }
-        _state.update { current ->
-            outcome.fold(
-                onSuccess = { done ->
-                    val summary = buildString {
-                        append("基准测试完成（$runs 次）\n")
-                        append("模型: ${buildingEngine.loadedModelVersion ?: "unknown"}\n")
-                        append("avg: ${"%.1f".format(done.avgMs)} ms\n")
-                        append("p90: ${done.p90Ms} ms\n")
-                        append("times: ${done.timesMs.joinToString(",")}")
-                    }
-                    current.copy(
-                        isInferring = false,
-                        lastMaskPath = (done.lastResult as? InspectionResult.Segmentation)?.maskPath,
-                        maskUpdateSeq = current.maskUpdateSeq + 1,
-                        statusMessage = "${done.lastResult.displayText()}\n$summary",
-                    )
-                },
-                onFailure = {
-                    current.copy(
-                        isInferring = false,
-                        statusMessage = "基准测试失败: ${it.message}",
-                    )
-                },
-            )
-        }
-    }
-
     override fun close() {
-        buildingEngine.close()
+        segmentationEngine.close()
         correctionEngine?.close()
         correctionEngine = null
     }
@@ -1313,7 +1268,10 @@ class InspectionFacadeImpl(
             .take(RECENT_RECORD_LIMIT)
             .map { it.toItem() }
 
-    private fun selectedAnalyseType(): AnalyseType = AnalyseType.BUILDING
+    private fun selectedAnalyseType(): AnalyseType = when (_state.value.selectedModelKey) {
+        ModelChoice.ROAD.key -> AnalyseType.ROAD
+        else -> AnalyseType.BUILDING
+    }
 
     private fun GeoBounds.toDto(): GeoBoundsDto =
         GeoBoundsDto(
@@ -1603,13 +1561,6 @@ class InspectionFacadeImpl(
                     }
                 },
             )
-
-    private data class BenchmarkOutcome(
-        val avgMs: Double,
-        val p90Ms: Long,
-        val timesMs: List<Long>,
-        val lastResult: InspectionResult,
-    )
 
     private data class MapInferOutcome(
         val record: ImageRecord,

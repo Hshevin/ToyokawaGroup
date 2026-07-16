@@ -151,7 +151,6 @@ GeoTIFF 地图核查时，`ImageScreen` 在存在 `mapSession` 后嵌入 `MapScr
 | `startDisasterTrack` / `captureCurrentLocation` / `finishDisasterTrack` | 端侧 GPS 范围采集 | 端侧专有 |
 | `setCompareImages` / `setCompareSlider` / `refineMaskAt` | 双时相与 SAM 点选入口 | 端侧专有 |
 | `setMapLayerVisibility` / `setMaskAlpha` | 控制高德 `GroundOverlay` 展示 | 端侧 UI 状态 |
-| `benchmark(uri, runs)` | 当前图连跑 N 次测时延 | 端侧专有 |
 | `refreshHistory()` | 读取最近 Room 记录 | `GET .../images` |
 | `close()` | 释放 PyTorch 模块 | 端侧专有 |
 

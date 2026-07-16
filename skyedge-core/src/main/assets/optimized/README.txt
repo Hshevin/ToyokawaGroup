@@ -1,14 +1,5 @@
-Active models (referenced by model_spec.json):
+Shipping models (referenced by model_spec.json):
 
-  building_unet_efficientnetb0_v1_pruned_fp8.fp8pkg
-  building_unet_efficientnetb0_v1_pruned_fp8_runtime.pt
-  road_unet_efficientnetb0_v1_fp8.fp8pkg
-  road_unet_efficientnetb0_v1_fp8_runtime.pt
-
-Tooling only (not loaded by App):
-
-  building_unet_efficientnetb0_v1_pruned_ft_s2.pth  — re-run tune_fp8_unet.py --prune
-
-Regenerate with:
-
-  py -3 tools/tune_fp8_unet.py --prune --output-dir tools/out/fp8_tune/building_pruned ...
+  scheme: Q1-P1-S2 (QP)
+  road:     models/road_unet_efficientnetb0_v1/optimized/rd_qp_q1_p1s2_v1_android.pt
+  building: models/building_unet_efficientnetb0_v1/optimized/bld_qp_q1_p1s2_v1_android.pt
