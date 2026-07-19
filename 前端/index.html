@@ -1,0 +1,267 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SkyEdge 低空影像智能巡检 App</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="phone-shell">
+      <header class="app-top">
+        <button id="backBtn" class="back-btn hidden" type="button" aria-label="返回">‹</button>
+        <div>
+          <p class="eyebrow" id="screenEyebrow">SkyEdge</p>
+          <h1 id="screenTitle">选择巡检场景</h1>
+        </div>
+        <div class="sync-pill">
+          <span class="sync-dot"></span>
+          <span>离线可用</span>
+        </div>
+      </header>
+
+      <section id="screen-scene" class="screen active" aria-label="场景选择">
+        <div class="scene-hero">
+          <h2>低空影像现场核查</h2>
+          <p>选择本次任务类型，进入对应的影像导入、智能识别、人工标注与报告导出流程。</p>
+        </div>
+
+        <div class="scene-grid">
+          <button class="scene-card primary" id="buildingSceneBtn" type="button">
+            <span class="scene-icon">▦</span>
+            <strong>城市建筑巡检</strong>
+            <small>建筑识别、人工标注、现场留证、报告导出</small>
+          </button>
+          <button class="scene-card" id="disasterSceneBtn" type="button">
+            <span class="scene-icon">⌖</span>
+            <strong>灾害巡检</strong>
+            <small>导入航拍图、实地定位采集范围、导出灾害报告</small>
+          </button>
+        </div>
+      </section>
+
+      <section id="screen-tasks" class="screen" aria-label="城市建筑任务">
+        <div class="action-grid single">
+          <button class="primary-action" id="newTaskBtn" type="button">
+            <span class="icon">+</span>
+            <span>新建任务</span>
+          </button>
+        </div>
+
+        <div class="quick-stats" aria-label="任务统计">
+          <div>
+            <strong id="taskCount">2</strong>
+            <span>任务</span>
+          </div>
+          <div>
+            <strong id="buildingCount">34</strong>
+            <span>建筑对象</span>
+          </div>
+          <div>
+            <strong id="markedCount">6</strong>
+            <span>已标注</span>
+          </div>
+        </div>
+
+        <div class="section-head">
+          <h2>建筑巡检任务</h2>
+          <span id="taskListHint">点击任务进入影像导入</span>
+        </div>
+        <div id="taskList" class="task-list"></div>
+        <div class="task-manage-bar">
+          <button id="deleteModeBtn" class="danger-link" type="button">删除任务</button>
+          <div id="deleteActions" class="delete-actions hidden">
+            <button id="cancelDeleteBtn" class="secondary-small" type="button">取消</button>
+            <button id="confirmDeleteBtn" class="danger-small" type="button">删除选中</button>
+          </div>
+        </div>
+      </section>
+
+      <section id="screen-image" class="screen" aria-label="影像导入与建筑识别">
+        <div class="task-context" id="taskContext"></div>
+
+        <div class="image-stage" id="imageStage">
+          <div id="mapOverlayLayer" class="map-overlay-layer hidden" aria-hidden="true">
+            <div class="map-label main">高德卫星底图</div>
+            <div class="map-label road">青溪路</div>
+            <div class="map-label area">核查片区</div>
+            <div class="map-fit-badge">GeoTIFF 已按坐标覆盖</div>
+          </div>
+          <img id="previewImage" src="assets/drone-inspection.png" alt="航拍影像预览" />
+          <div class="building-mask-layer" id="buildingMaskLayer"></div>
+        </div>
+
+        <div class="image-actions">
+          <label class="secondary-action file-action">
+            <span class="icon">↑</span>
+            <span id="importLabel">本地导入影像</span>
+            <input id="imageInput" type="file" accept="image/*,.tif,.tiff,.geotiff" hidden />
+          </label>
+          <button class="primary-action" id="detectBtn" type="button">识别建筑</button>
+        </div>
+
+        <div class="recognition-panel">
+          <div>
+            <h2>识别结果</h2>
+            <p id="recognitionHint">导入影像后点击识别建筑，系统会生成可交互的红色 mask。</p>
+          </div>
+          <div class="result-pills">
+            <span id="detectedTotal">0 个建筑</span>
+            <span id="detectedStatus">待识别</span>
+          </div>
+        </div>
+
+        <button id="exportReportBtn" class="generate-btn" type="button">导出报告</button>
+      </section>
+
+      <section id="screen-report" class="screen" aria-label="建筑巡检报告">
+        <div class="report-summary" id="reportSummary"></div>
+        <button id="generateReportBtn" class="generate-btn" type="button">生成报告</button>
+        <div class="export-list" id="exportList"></div>
+      </section>
+
+      <section id="screen-disaster-tasks" class="screen" aria-label="灾害巡检任务">
+        <div class="action-grid single">
+          <button class="primary-action" id="newDisasterTaskBtn" type="button">
+            <span class="icon">+</span>
+            <span>新建任务</span>
+          </button>
+        </div>
+
+        <div class="quick-stats" aria-label="灾害任务统计">
+          <div>
+            <strong id="disasterTaskCount">2</strong>
+            <span>任务</span>
+          </div>
+          <div>
+            <strong id="disasterRangeCount">1</strong>
+            <span>已闭合范围</span>
+          </div>
+          <div>
+            <strong id="disasterPendingCount">1</strong>
+            <span>待上报</span>
+          </div>
+        </div>
+
+        <div class="section-head">
+          <h2>灾害巡检任务</h2>
+          <span id="disasterTaskListHint">点击任务进入范围校正</span>
+        </div>
+        <div id="disasterTaskList" class="task-list"></div>
+        <div class="task-manage-bar">
+          <button id="deleteDisasterModeBtn" class="danger-link" type="button">删除任务</button>
+          <div id="deleteDisasterActions" class="delete-actions hidden">
+            <button id="cancelDeleteDisasterBtn" class="secondary-small" type="button">取消</button>
+            <button id="confirmDeleteDisasterBtn" class="danger-small" type="button">删除选中</button>
+          </div>
+        </div>
+      </section>
+
+      <section id="screen-disaster-image" class="screen" aria-label="灾害范围校正">
+        <div class="task-context disaster">
+          <div>
+            <h2 id="disasterTaskTitle">灾害范围校正</h2>
+            <p id="disasterTaskMeta">导入现场航拍图后，沿灾害边界采集定位点并生成实测范围。</p>
+          </div>
+          <span id="disasterStatusPill">待导入</span>
+        </div>
+
+        <div class="image-stage disaster-stage" id="disasterStage">
+          <img id="disasterPreviewImage" src="assets/drone-inspection.png" alt="灾害航拍图预览" />
+          <svg id="disasterRangeLayer" class="disaster-range-layer" viewBox="0 0 100 100" preserveAspectRatio="none"></svg>
+          <span id="rangeCallout" class="range-callout hidden">实测灾害范围</span>
+        </div>
+
+        <div class="image-actions">
+          <label class="secondary-action file-action">
+            <span class="icon">↑</span>
+            <span id="disasterImportLabel">导入照片</span>
+            <input id="disasterImageInput" type="file" accept="image/*,.tif,.tiff" hidden />
+          </label>
+          <button class="primary-action" id="startTrackBtn" type="button">实地范围定位</button>
+        </div>
+
+        <div class="recognition-panel disaster-panel">
+          <div>
+            <h2>实地范围记录</h2>
+            <p id="disasterTrackHint">导入照片后点击实地范围定位，系统会记录巡检人员 GPS 轨迹。</p>
+          </div>
+          <div class="result-pills">
+            <span id="disasterPointCount">0 个点</span>
+            <span id="disasterRangeStatus">未开始</span>
+          </div>
+        </div>
+
+        <div class="disaster-actions">
+          <button id="finishTrackBtn" class="secondary-action hidden" type="button">结束采集</button>
+          <button id="saveRangeBtn" class="primary-action hidden" type="button">保存范围</button>
+          <button id="resetTrackBtn" class="secondary-action hidden" type="button">重新采集</button>
+        </div>
+        <button id="exportDisasterReportBtn" class="generate-btn hidden" type="button">导出报告</button>
+      </section>
+
+      <section id="screen-disaster-report" class="screen" aria-label="灾害范围报告">
+        <div class="report-summary" id="disasterReportSummary"></div>
+        <button id="generateDisasterReportBtn" class="generate-btn" type="button">生成报告</button>
+        <div class="export-list" id="disasterExportList"></div>
+      </section>
+
+      <section id="buildingSheet" class="bottom-sheet" aria-label="建筑标注卡片">
+        <div class="sheet-handle"></div>
+        <div class="sheet-head">
+          <div>
+            <p class="eyebrow">建筑对象</p>
+            <h2 id="sheetBuildingId">B-001</h2>
+          </div>
+          <button id="closeSheetBtn" class="icon-btn" type="button">×</button>
+        </div>
+
+        <label class="field-label">
+          建筑编号
+          <input id="buildingCodeInput" type="text" placeholder="如 B-023" />
+        </label>
+        <label class="field-label">
+          建筑位置
+          <input id="buildingLocationInput" type="text" placeholder="填写现场位置或地块名称" />
+        </label>
+
+        <div class="info-row">
+          <span>来源</span>
+          <strong id="buildingSource">建筑识别自动圈定</strong>
+        </div>
+
+        <div class="field-label">
+          状态
+          <div class="segmented" id="statusOptions">
+            <button type="button" data-status="已标注">已标注</button>
+            <button type="button" data-status="已排除">已排除</button>
+          </div>
+        </div>
+
+        <div class="field-label">
+          人工标注
+          <div class="tag-grid" id="labelOptions">
+            <button type="button" data-label="新建建筑">新建建筑</button>
+            <button type="button" data-label="疑似违建">疑似违建</button>
+            <button type="button" data-label="临时搭建">临时搭建</button>
+            <button type="button" data-label="损毁/倒塌">损毁/倒塌</button>
+            <button type="button" data-label="其他">其他</button>
+          </div>
+        </div>
+
+        <label class="photo-upload">
+          <span>添加拍摄现场照片</span>
+          <input id="sitePhotoInput" type="file" accept="image/*" hidden />
+        </label>
+
+        <div class="sheet-actions">
+          <button id="saveAnnotationBtn" class="primary-action" type="button">保存标注</button>
+          <button id="cancelAnnotationBtn" class="secondary-action" type="button">取消标注</button>
+        </div>
+      </section>
+
+      <div id="toast" class="toast hidden"></div>
+    </main>
+    <script src="app.js"></script>
+  </body>
+</html>

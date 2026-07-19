@@ -10,6 +10,7 @@
 | **端侧推理** | `skyedge-core`：Building U-Net、MobileSAM、GeoTIFF 解码、mask 后处理 |
 | **业务编排** | 本地任务 / 异常卡片 / 人工复核 / 离线报告（JSON、CSV、PDF、GeoJSON、长图） |
 | **UI** | `skyedge-ui` Compose 四 Tab + 地图核查 + 建筑标注页 |
+| Web 交互原型 | `前端/`：浏览器 Demo（建筑/灾害流程；按扩展名分流 GeoTIFF） |
 | 本地数据 | `imgrecord` Room 组件 + Task / Anomaly 表 |
 
 架构细节见 [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)；功能规划见 [`docs/TODO.md`](docs/TODO.md)；接口契约见 [`openapi/api.yaml`](openapi/api.yaml)。
@@ -168,6 +169,9 @@ MobileSAM 交付包与 demo 见 `skyedge_mobilesam_delivery/`；导出 / FP8 脚
 ├── docs/                              # 架构、论文实验设计、交付清单、优化报告、MVP 测试报告
 ├── tools/                             # 剪枝 / FP8 / MobileSAM 导出脚本
 ├── geotiff_map_test_samples/          # 地图测试样例（不进 APK）
+├── 前端/                              # Web 交互原型（浏览器 Demo，非 APK）
+│   ├── index.html / app.js / styles.css
+│   └── start_frontend.bat             # 本地 http://127.0.0.1:5500
 └── skyedge_vm_test_images/            # Building 验收图
 ```
 
@@ -217,6 +221,17 @@ MobileSAM 交付包与 demo 见 `skyedge_mobilesam_delivery/`；导出 / FP8 脚
 4. 可选：**Building 修正演示**（内置 demo，无需选图）
 
 > 高德瓦片需要网络；Building / MobileSAM 推理与报告导出均在端侧完成。
+
+### 运行 Web 交互原型（`前端/`）
+
+浏览器 Demo，不依赖 Android Studio：
+
+```bat
+cd 前端
+start_frontend.bat
+```
+
+浏览器打开 `http://127.0.0.1:5500`。建筑场景「导入影像」按扩展名分流：`.tif/.tiff/.geotiff` 覆盖地图，普通图片不上图。
 
 ### 构建与测试
 
