@@ -8,7 +8,6 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
 import android.net.Uri
-import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -28,6 +27,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
+import com.example.skyedge.core.geo.GeoTiffDetector
 import com.example.skyedge.ui.image.ImageScreen
 import com.example.skyedge.ui.inspection.InferenceViewModel
 import com.example.skyedge.ui.report.ReportScreen
@@ -52,25 +52,24 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             var selectedTab by rememberSaveable { mutableStateOf(AppTab.TASK) }
-            val galleryLauncher = rememberLauncherForActivityResult(
-                contract = ActivityResultContracts.GetContent(),
-                onResult = { uri: Uri? ->
-                    selectedImageUri = uri
-                    uri?.let { viewModel.infer(it) }
-                },
-            )
-            val geoTiffLauncher = rememberLauncherForActivityResult(
+            val importImageLauncher = rememberLauncherForActivityResult(
                 contract = ActivityResultContracts.OpenDocument(),
                 onResult = { uri: Uri? ->
-                    uri?.let {
-                        try {
-                            contentResolver.takePersistableUriPermission(
-                                it,
-                                Intent.FLAG_GRANT_READ_URI_PERMISSION,
-                            )
-                        } catch (_: SecurityException) {
-                        }
-                        viewModel.loadGeoTiff(it)
+                    uri ?: return@rememberLauncherForActivityResult
+                    try {
+                        contentResolver.takePersistableUriPermission(
+                            uri,
+                            Intent.FLAG_GRANT_READ_URI_PERMISSION,
+                        )
+                    } catch (_: SecurityException) {
+                    }
+                    val isGeo = GeoTiffDetector.isGeoTiff(this@MainActivity, uri)
+                    if (isGeo) {
+                        selectedImageUri = null
+                        viewModel.importImage(uri)
+                    } else {
+                        selectedImageUri = uri
+                        viewModel.importImage(uri)
                     }
                 },
             )
@@ -99,16 +98,6 @@ class MainActivity : ComponentActivity() {
                 },
             )
 
-            val permissionLauncher = rememberLauncherForActivityResult(
-                contract = ActivityResultContracts.RequestPermission(),
-                onResult = { granted ->
-                    if (granted) {
-                        galleryLauncher.launch("image/*")
-                    } else {
-                        viewModel.updateStatus("需要相册权限才能选择图片")
-                    }
-                },
-            )
             val cameraPermissionLauncher = rememberLauncherForActivityResult(
                 contract = ActivityResultContracts.RequestPermission(),
                 onResult = { granted ->
@@ -153,23 +142,15 @@ class MainActivity : ComponentActivity() {
                         viewModel = viewModel,
                         selectedImageUri = selectedImageUri,
                         onPickImage = {
-                            if (needsReadImagesPermission() &&
-                                ContextCompat.checkSelfPermission(
-                                    this@MainActivity,
-                                    Manifest.permission.READ_MEDIA_IMAGES,
-                                ) != PackageManager.PERMISSION_GRANTED
-                            ) {
-                                permissionLauncher.launch(Manifest.permission.READ_MEDIA_IMAGES)
-                            } else {
-                                galleryLauncher.launch("image/*")
-                            }
-                        },
-                        onOpenGeoTiff = {
-                            geoTiffLauncher.launch(arrayOf("image/tiff", "image/x-tiff", "*/*"))
+                            // SAF OpenDocument covers photos + GeoTIFF; no media permission required.
+                            importImageLauncher.launch(
+                                arrayOf("image/*", "image/tiff", "image/x-tiff", "*/*"),
+                            )
                         },
                         onLoadSample = { assetPath ->
                             val uri = renderSampleImage(assetPath)
                             selectedImageUri = uri
+                            viewModel.clearMapSession()
                             viewModel.infer(uri)
                         },
                         isAmapKeyConfigured = hasAmapApiKey(),
@@ -214,9 +195,6 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
-
-    private fun needsReadImagesPermission(): Boolean =
-        Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
 
     private fun hasAmapApiKey(): Boolean {
         val appInfo = packageManager.getApplicationInfo(

@@ -208,8 +208,8 @@ MobileSAM 交付包与 demo 见 `skyedge_mobilesam_delivery/`；导出 / FP8 脚
 3. 复制 `local.properties.example` 为 `local.properties`，填入 `sdk.dir` 与 `AMAP_API_KEY`（地图页需要）
 4. 连接真机（推荐）或模拟器，Run `app`
 5. **任务 Tab**：创建或选择建筑核查任务
-6. **影像 Tab**：相册 / GeoTIFF / 内置样例 → **开始检测**
-7. **地图模式**：导入 GeoTIFF → 开始检测 → 卫星底图 + 正射 + mask 叠加
+6. **影像 Tab**：点「导入影像」→ 按扩展名自动分流（`.tif` 上地图，jpg/png 本地检测）；或用内置样例
+7. **地图模式**：导入 GeoTIFF 后自动进入 → 开始检测 → 卫星底图 + 正射 + mask 叠加
 8. **核查 Tab**：点选候选建筑，确认经纬度 / 类型 / 备注，拍照取证
 9. **报告 Tab**：预览并导出 JSON / CSV / PDF / GeoJSON / 长图
 

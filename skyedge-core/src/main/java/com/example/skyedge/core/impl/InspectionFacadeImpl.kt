@@ -618,7 +618,7 @@ class InspectionFacadeImpl(
             outcome.fold(
                 onSuccess = { (sessionId, metadata) ->
                     current.copy(
-                        statusMessage = "GeoTIFF 已加载，请开始检测或调整图层",
+                        statusMessage = "GeoTIFF 已覆盖到地图，请开始检测或调整图层",
                         mapSession = MapSessionUiModel(
                             sessionId = sessionId,
                             boundsGcj02 = metadata.boundsGcj02.toDto(),

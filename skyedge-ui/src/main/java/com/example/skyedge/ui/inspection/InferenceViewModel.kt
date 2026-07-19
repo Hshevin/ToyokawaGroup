@@ -12,6 +12,7 @@ import com.example.skyedge.core.api.ReportFormat
 import com.example.skyedge.core.api.ReviewAnomalyRequest
 import com.example.skyedge.core.api.SubmitAnomalyRequest
 import com.example.skyedge.core.api.CreateTaskRequest
+import com.example.skyedge.core.geo.GeoTiffDetector
 import com.example.skyedge.core.impl.InspectionFacadeImpl
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -49,6 +50,20 @@ class InferenceViewModel @JvmOverloads constructor(
     fun infer(uri: Uri) {
         viewModelScope.launch {
             facade.infer(uri)
+        }
+    }
+
+    /**
+     * Single import entry: GeoTIFF → map overlay session; plain image → inspect without map.
+     */
+    fun importImage(uri: Uri) {
+        viewModelScope.launch {
+            if (GeoTiffDetector.isGeoTiff(getApplication(), uri)) {
+                facade.loadGeoTiff(uri)
+            } else {
+                facade.clearMapSession()
+                facade.infer(uri)
+            }
         }
     }
 

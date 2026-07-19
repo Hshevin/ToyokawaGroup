@@ -52,9 +52,9 @@ fun MapScreen(
     val selectedAnomaly = remember(uiState.anomalies, uiState.selectedAnomalyId) {
         uiState.anomalies.firstOrNull { it.id == uiState.selectedAnomalyId }
     }
-    val openGeoTiff = rememberLauncherForActivityResult(
+    val openImport = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument(),
-        onResult = { uri -> uri?.let(mapViewModel::loadGeoTiff) },
+        onResult = { uri -> uri?.let(viewModel::importImage) },
     )
 
     Box(modifier = modifier.fillMaxSize()) {
@@ -107,11 +107,11 @@ fun MapScreen(
                 ) {
                     Button(
                         onClick = {
-                            openGeoTiff.launch(arrayOf("image/tiff", "image/x-tiff", "*/*"))
+                            openImport.launch(arrayOf("image/*", "image/tiff", "image/x-tiff", "*/*"))
                         },
                         enabled = isAmapKeyConfigured && !uiState.isInferring,
                     ) {
-                        Text("导入 GeoTIFF")
+                        Text("导入影像")
                     }
                     Button(
                         onClick = mapViewModel::inferMapSession,
