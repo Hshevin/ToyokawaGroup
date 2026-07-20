@@ -1,21 +1,20 @@
 package com.example.skyedge.core.impl
 
 import android.Manifest
+import android.annotation.SuppressLint
 import android.content.Context
+import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
-import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.pdf.PdfDocument
 import android.location.LocationManager
 import android.net.Uri
-import android.content.pm.PackageManager
 import com.example.skyedge.core.api.AnomalyTypeUi
 import com.example.skyedge.core.api.AnomalyUiModel
 import com.example.skyedge.core.api.AnomalyUpdateRequest
 import com.example.skyedge.core.api.BoundingBoxDto
-import com.example.skyedge.core.api.CompareSessionUiModel
 import com.example.skyedge.core.api.CreateTaskRequest
 import com.example.skyedge.core.api.DisasterPointUiModel
 import com.example.skyedge.core.api.DisasterTrackUiModel
@@ -901,9 +900,14 @@ class InspectionFacadeImpl(
         }
     }
 
+    @SuppressLint("MissingPermission")
     override suspend fun captureCurrentLocation() {
         withContext(Dispatchers.Main) {
-            if (context.checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            val fineGranted = context.checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) ==
+                PackageManager.PERMISSION_GRANTED
+            val coarseGranted = context.checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) ==
+                PackageManager.PERMISSION_GRANTED
+            if (!fineGranted && !coarseGranted) {
                 updateStatus("需要定位权限才能采集 GPS 点")
                 return@withContext
             }
@@ -949,12 +953,37 @@ class InspectionFacadeImpl(
     }
 
     override fun refineMaskAt(x: Float, y: Float) {
+        val current = _state.value
+        val imageWidth = current.interactiveImageWidth
+        val imageHeight = current.interactiveImageHeight
+        if (current.interactiveImageReady && imageWidth != null && imageHeight != null &&
+            imageWidth > 0 && imageHeight > 0
+        ) {
+            scope.launch {
+                runCatching {
+                    inferInteractivePoint(
+                        x = x,
+                        y = y,
+                        imageWidth = imageWidth,
+                        imageHeight = imageHeight,
+                    )
+                }
+                _state.update {
+                    it.copy(
+                        compareSession = it.compareSession.copy(
+                            samStatus = "已触发局部修正 (${"%.2f".format(x)}, ${"%.2f".format(y)})，结果见影像页",
+                        ),
+                    )
+                }
+            }
+            return
+        }
         _state.update {
             it.copy(
                 compareSession = it.compareSession.copy(
-                    samStatus = "MobileSAM 模型待算法侧交付；已记录点选坐标 ${"%.2f".format(x)}, ${"%.2f".format(y)}",
+                    samStatus = "请先在影像页完成检测并等待「局部修正已就绪」",
                 ),
-                statusMessage = "MobileSAM 模型待算法侧交付，当前仅保留点选入口",
+                statusMessage = "点选修正请在影像页操作",
             )
         }
     }

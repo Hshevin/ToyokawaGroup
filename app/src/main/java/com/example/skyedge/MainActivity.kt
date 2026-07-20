@@ -22,7 +22,6 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -40,6 +39,10 @@ import java.io.File
 import java.io.FileOutputStream
 import org.json.JSONObject
 
+/**
+ * 真功能入口：底栏 Tab + InferenceViewModel。
+ * UI 视觉来自 skyedge-ui-handoff-20260720（对齐 Web 原型），保留导入分流与业务 launcher。
+ */
 class MainActivity : ComponentActivity() {
 
     private val viewModel: InferenceViewModel by viewModels()
@@ -55,165 +58,154 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             SkyEdgeTheme {
-            var selectedTab by rememberSaveable { mutableStateOf(AppTab.TASK) }
-            val importImageLauncher = rememberLauncherForActivityResult(
-                contract = ActivityResultContracts.OpenDocument(),
-                onResult = { uri: Uri? ->
-                    uri ?: return@rememberLauncherForActivityResult
-                    try {
-                        contentResolver.takePersistableUriPermission(
-                            uri,
-                            Intent.FLAG_GRANT_READ_URI_PERMISSION,
-                        )
-                    } catch (_: SecurityException) {
-                    }
-                    val isGeo = GeoTiffDetector.isGeoTiff(this@MainActivity, uri)
-                    if (isGeo) {
-                        selectedImageUri = null
-                        viewModel.importImage(uri)
-                    } else {
-                        selectedImageUri = uri
-                        viewModel.importImage(uri)
-                    }
-                },
-            )
-            val historicalImageLauncher = rememberLauncherForActivityResult(
-                contract = ActivityResultContracts.GetContent(),
-                onResult = { uri: Uri? ->
-                    viewModel.setCompareImages(uri, null)
-                },
-            )
-            val currentCompareImageLauncher = rememberLauncherForActivityResult(
-                contract = ActivityResultContracts.GetContent(),
-                onResult = { uri: Uri? ->
-                    viewModel.setCompareImages(null, uri)
-                },
-            )
-            val takePictureLauncher = rememberLauncherForActivityResult(
-                contract = ActivityResultContracts.TakePicture(),
-                onResult = { success ->
-                    val anomalyId = pendingPhotoAnomalyId
-                    val uri = pendingCameraUri
-                    if (success && anomalyId != null && uri != null) {
-                        viewModel.attachPhoto(anomalyId, uri)
-                    }
-                    pendingPhotoAnomalyId = null
-                    pendingCameraUri = null
-                },
-            )
-
-            val cameraPermissionLauncher = rememberLauncherForActivityResult(
-                contract = ActivityResultContracts.RequestPermission(),
-                onResult = { granted ->
-                    if (granted) {
-                        pendingCameraUri?.let { takePictureLauncher.launch(it) }
-                    } else {
-                        viewModel.updateStatus("需要相机权限才能拍照取证")
-                    }
-                },
-            )
-            val locationPermissionLauncher = rememberLauncherForActivityResult(
-                contract = ActivityResultContracts.RequestPermission(),
-                onResult = { granted ->
-                    if (granted) {
-                        viewModel.captureCurrentLocation()
-                    } else {
-                        viewModel.updateStatus("需要定位权限才能记录 GPS 点")
-                    }
-                },
-            )
-
-            Scaffold(
-                containerColor = SkyEdgeColors.Paper,
-                bottomBar = {
-                    NavigationBar(
-                        containerColor = SkyEdgeColors.Header,
-                        contentColor = SkyEdgeColors.Ink,
-                    ) {
-                        AppTab.entries.forEach { tab ->
-                            NavigationBarItem(
-                                selected = selectedTab == tab,
-                                onClick = { selectedTab = tab },
-                                label = { Text(tab.label) },
-                                icon = {},
-                                colors = NavigationBarItemDefaults.colors(
-                                    selectedIconColor = SkyEdgeColors.Green,
-                                    selectedTextColor = SkyEdgeColors.Green,
-                                    indicatorColor = SkyEdgeColors.Field,
-                                    unselectedIconColor = SkyEdgeColors.Muted,
-                                    unselectedTextColor = SkyEdgeColors.Muted,
-                                ),
+                var selectedTab by rememberSaveable { mutableStateOf(AppTab.TASK) }
+                val imageImportLauncher = rememberLauncherForActivityResult(
+                    contract = ActivityResultContracts.OpenDocument(),
+                    onResult = { uri: Uri? ->
+                        uri ?: return@rememberLauncherForActivityResult
+                        try {
+                            contentResolver.takePersistableUriPermission(
+                                uri,
+                                Intent.FLAG_GRANT_READ_URI_PERMISSION,
                             )
+                        } catch (_: SecurityException) {
                         }
-                    }
-                },
-            ) { innerPadding ->
-                when (selectedTab) {
-                    AppTab.TASK -> TaskScreen(
-                        viewModel = viewModel,
-                        modifier = Modifier.padding(innerPadding),
-                    )
-                    AppTab.IMAGE -> ImageScreen(
-                        viewModel = viewModel,
-                        selectedImageUri = selectedImageUri,
-                        onPickImage = {
-                            // SAF OpenDocument covers photos + GeoTIFF; no media permission required.
-                            importImageLauncher.launch(
-                                arrayOf(
-                                    "image/*",
-                                    "image/tiff",
-                                    "image/x-tiff",
-                                    "application/octet-stream",
-                                    "*/*",
-                                ),
-                            )
-                        },
-                        onLoadSample = { assetPath ->
-                            val uri = renderSampleImage(assetPath)
+                        if (GeoTiffDetector.isGeoTiff(this@MainActivity, uri)) {
+                            selectedImageUri = null
+                            viewModel.importImage(uri)
+                        } else {
                             selectedImageUri = uri
-                            viewModel.clearMapSession()
-                            viewModel.infer(uri)
-                        },
-                        isAmapKeyConfigured = hasAmapApiKey(),
-                        modifier = Modifier.padding(innerPadding),
-                    )
-                    AppTab.REVIEW -> ReviewScreen(
-                        viewModel = viewModel,
-                        onTakePhoto = { anomalyId ->
-                            val uri = createCameraUri()
-                            pendingPhotoAnomalyId = anomalyId
-                            pendingCameraUri = uri
-                            if (ContextCompat.checkSelfPermission(
-                                    this@MainActivity,
-                                    Manifest.permission.CAMERA,
-                                ) == PackageManager.PERMISSION_GRANTED
-                            ) {
-                                takePictureLauncher.launch(uri)
-                            } else {
-                                cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+                            viewModel.importImage(uri)
+                        }
+                    },
+                )
+                val historicalImageLauncher = rememberLauncherForActivityResult(
+                    contract = ActivityResultContracts.GetContent(),
+                    onResult = { uri: Uri? ->
+                        viewModel.setCompareImages(uri, null)
+                    },
+                )
+                val currentCompareImageLauncher = rememberLauncherForActivityResult(
+                    contract = ActivityResultContracts.GetContent(),
+                    onResult = { uri: Uri? ->
+                        viewModel.setCompareImages(null, uri)
+                    },
+                )
+                val takePictureLauncher = rememberLauncherForActivityResult(
+                    contract = ActivityResultContracts.TakePicture(),
+                    onResult = { success ->
+                        val anomalyId = pendingPhotoAnomalyId
+                        val uri = pendingCameraUri
+                        if (success && anomalyId != null && uri != null) {
+                            viewModel.attachPhoto(anomalyId, uri)
+                        }
+                        pendingPhotoAnomalyId = null
+                        pendingCameraUri = null
+                    },
+                )
+                val cameraPermissionLauncher = rememberLauncherForActivityResult(
+                    contract = ActivityResultContracts.RequestPermission(),
+                    onResult = { granted ->
+                        if (granted) {
+                            pendingCameraUri?.let { takePictureLauncher.launch(it) }
+                        } else {
+                            viewModel.updateStatus("需要相机权限才能拍照取证")
+                        }
+                    },
+                )
+                val locationPermissionLauncher = rememberLauncherForActivityResult(
+                    contract = ActivityResultContracts.RequestPermission(),
+                    onResult = { granted ->
+                        if (granted) {
+                            viewModel.captureCurrentLocation()
+                        } else {
+                            viewModel.updateStatus("需要定位权限才能记录 GPS 点")
+                        }
+                    },
+                )
+
+                Scaffold(
+                    containerColor = SkyEdgeColors.Paper,
+                    bottomBar = {
+                        NavigationBar(
+                            containerColor = SkyEdgeColors.Header,
+                            contentColor = SkyEdgeColors.Ink,
+                        ) {
+                            AppTab.entries.forEach { tab ->
+                                NavigationBarItem(
+                                    selected = selectedTab == tab,
+                                    onClick = { selectedTab = tab },
+                                    label = { Text(tab.label) },
+                                    icon = {},
+                                    colors = NavigationBarItemDefaults.colors(
+                                        selectedIconColor = SkyEdgeColors.Green,
+                                        selectedTextColor = SkyEdgeColors.Green,
+                                        indicatorColor = SkyEdgeColors.Field,
+                                        unselectedIconColor = SkyEdgeColors.Muted,
+                                        unselectedTextColor = SkyEdgeColors.Muted,
+                                    ),
+                                )
                             }
-                        },
-                        modifier = Modifier.padding(innerPadding),
-                    )
-                    AppTab.REPORT -> ReportScreen(
-                        viewModel = viewModel,
-                        onCaptureLocation = {
-                            if (ContextCompat.checkSelfPermission(
-                                    this@MainActivity,
-                                    Manifest.permission.ACCESS_FINE_LOCATION,
-                                ) == PackageManager.PERMISSION_GRANTED
-                            ) {
-                                viewModel.captureCurrentLocation()
-                            } else {
-                                locationPermissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
-                            }
-                        },
-                        onPickHistoricalImage = { historicalImageLauncher.launch("image/*") },
-                        onPickCurrentImage = { currentCompareImageLauncher.launch("image/*") },
-                        modifier = Modifier.padding(innerPadding),
-                    )
+                        }
+                    },
+                ) { innerPadding ->
+                    when (selectedTab) {
+                        AppTab.TASK -> TaskScreen(
+                            viewModel = viewModel,
+                            modifier = Modifier.padding(innerPadding),
+                        )
+                        AppTab.IMAGE -> ImageScreen(
+                            viewModel = viewModel,
+                            selectedImageUri = selectedImageUri,
+                            onImportImage = {
+                                imageImportLauncher.launch(IMAGE_IMPORT_MIME_TYPES)
+                            },
+                            onLoadSample = { assetPath ->
+                                val uri = renderSampleImage(assetPath)
+                                selectedImageUri = uri
+                                viewModel.clearMapSession()
+                                viewModel.infer(uri)
+                            },
+                            isAmapKeyConfigured = hasAmapApiKey(),
+                            modifier = Modifier.padding(innerPadding),
+                        )
+                        AppTab.REVIEW -> ReviewScreen(
+                            viewModel = viewModel,
+                            onTakePhoto = { anomalyId ->
+                                val uri = createCameraUri()
+                                pendingPhotoAnomalyId = anomalyId
+                                pendingCameraUri = uri
+                                if (ContextCompat.checkSelfPermission(
+                                        this@MainActivity,
+                                        Manifest.permission.CAMERA,
+                                    ) == PackageManager.PERMISSION_GRANTED
+                                ) {
+                                    takePictureLauncher.launch(uri)
+                                } else {
+                                    cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+                                }
+                            },
+                            modifier = Modifier.padding(innerPadding),
+                        )
+                        AppTab.REPORT -> ReportScreen(
+                            viewModel = viewModel,
+                            onCaptureLocation = {
+                                if (ContextCompat.checkSelfPermission(
+                                        this@MainActivity,
+                                        Manifest.permission.ACCESS_FINE_LOCATION,
+                                    ) == PackageManager.PERMISSION_GRANTED
+                                ) {
+                                    viewModel.captureCurrentLocation()
+                                } else {
+                                    locationPermissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
+                                }
+                            },
+                            onPickHistoricalImage = { historicalImageLauncher.launch("image/*") },
+                            onPickCurrentImage = { currentCompareImageLauncher.launch("image/*") },
+                            modifier = Modifier.padding(innerPadding),
+                        )
+                    }
                 }
-            }
             }
         }
     }
@@ -275,5 +267,15 @@ class MainActivity : ComponentActivity() {
         IMAGE("影像"),
         REVIEW("核查"),
         REPORT("报告"),
+    }
+
+    private companion object {
+        val IMAGE_IMPORT_MIME_TYPES = arrayOf(
+            "image/*",
+            "image/tiff",
+            "image/x-tiff",
+            "application/octet-stream",
+            "*/*",
+        )
     }
 }

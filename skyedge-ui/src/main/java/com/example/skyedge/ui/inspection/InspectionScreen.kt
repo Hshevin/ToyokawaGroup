@@ -17,8 +17,8 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -40,6 +40,10 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
+import com.example.skyedge.ui.theme.SkyEdgeColors
+import com.example.skyedge.ui.theme.SkyPrimaryButton
+import com.example.skyedge.ui.theme.SkyScreenHeader
+import com.example.skyedge.ui.theme.SkySecondaryButton
 
 @Composable
 fun InspectionScreen(
@@ -56,55 +60,86 @@ fun InspectionScreen(
     Column(
         modifier = Modifier
             .then(if (embedded) Modifier.fillMaxWidth() else Modifier.fillMaxSize())
-            .then(if (!embedded) Modifier.verticalScroll(scrollState) else Modifier)
-            .padding(if (embedded) 0.dp else 16.dp),
+            .then(if (!embedded) Modifier.verticalScroll(scrollState) else Modifier),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         if (!embedded) {
-            Text(
-                text = "低空巡检 AI 原型",
-                style = MaterialTheme.typography.headlineMedium,
+            SkyScreenHeader(
+                eyebrow = "边缘巡检",
+                title = "低空巡检",
             )
-            Text(
-                text = "Building 分割 + 点选/框选局部修正",
-                style = MaterialTheme.typography.bodyMedium,
+        }
+
+        Column(
+            modifier = Modifier.padding(if (embedded) 0.dp else 16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            if (!embedded) {
+                Text(
+                    text = "Building 分割 + 点选/框选局部修正",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = SkyEdgeColors.Muted,
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+            }
+
+            CorrectionStatusBanner(
+                hasImage = selectedImageUri != null,
+                hasMask = uiState.lastMaskPath != null,
+                preparingCorrection = preparingCorrection,
+                correctionEnabled = correctionEnabled,
+                roiActive = uiState.interactiveRoiActive,
             )
+
             Spacer(modifier = Modifier.height(12.dp))
-        }
 
-        CorrectionStatusBanner(
-            hasImage = selectedImageUri != null,
-            hasMask = uiState.lastMaskPath != null,
-            preparingCorrection = preparingCorrection,
-            correctionEnabled = correctionEnabled,
-            roiActive = uiState.interactiveRoiActive,
-        )
-
-        Spacer(modifier = Modifier.height(12.dp))
-
-        val maskPath = uiState.lastMaskPath
-        val overlayBitmap = remember(maskPath, uiState.maskUpdateSeq) {
-            buildMaskOverlay(maskPath, uiState.selectedModelKey)
-        }
-        if (selectedImageUri != null || overlayBitmap != null) {
-            val imageWidth = uiState.interactiveImageWidth ?: 1
-            val imageHeight = uiState.interactiveImageHeight ?: 1
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally),
-                verticalAlignment = Alignment.Top,
-            ) {
-                if (selectedImageUri != null) {
+            val maskPath = uiState.lastMaskPath
+            val overlayBitmap = remember(maskPath, uiState.maskUpdateSeq) {
+                buildMaskOverlay(maskPath, uiState.selectedModelKey)
+            }
+            if (selectedImageUri != null || overlayBitmap != null) {
+                val imageWidth = uiState.interactiveImageWidth ?: 1
+                val imageHeight = uiState.interactiveImageHeight ?: 1
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally),
+                    verticalAlignment = Alignment.Top,
+                ) {
+                    if (selectedImageUri != null) {
+                        InteractiveImagePanel(
+                            title = when {
+                                correctionEnabled -> "原图（可点选/框选）"
+                                preparingCorrection -> "原图（修正引擎准备中…）"
+                                uiState.lastMaskPath != null -> "原图（等待修正就绪）"
+                                else -> "原图"
+                            },
+                            imageUri = selectedImageUri,
+                            overlayBitmap = null,
+                            correctionEnabled = correctionEnabled,
+                            imageWidth = imageWidth,
+                            imageHeight = imageHeight,
+                            interactivePoints = uiState.interactivePoints,
+                            onTap = { x, y ->
+                                viewModel.inferInteractivePoint(x, y, imageWidth, imageHeight)
+                            },
+                            onBox = { x1, y1, x2, y2 ->
+                                viewModel.selectCorrectionRoi(
+                                    uri = selectedImageUri,
+                                    x1 = x1,
+                                    y1 = y1,
+                                    x2 = x2,
+                                    y2 = y2,
+                                    imageWidth = imageWidth,
+                                    imageHeight = imageHeight,
+                                )
+                            },
+                        )
+                    }
                     InteractiveImagePanel(
-                        title = when {
-                            correctionEnabled -> "原图（可点选/框选）"
-                            preparingCorrection -> "原图（修正引擎准备中…）"
-                            uiState.lastMaskPath != null -> "原图（等待修正就绪）"
-                            else -> "原图"
-                        },
+                        title = if (correctionEnabled) "对比（可点选/框选）" else "处理后对比",
                         imageUri = selectedImageUri,
-                        overlayBitmap = null,
-                        correctionEnabled = correctionEnabled,
+                        overlayBitmap = overlayBitmap,
+                        correctionEnabled = correctionEnabled && selectedImageUri != null,
                         imageWidth = imageWidth,
                         imageHeight = imageHeight,
                         interactivePoints = uiState.interactivePoints,
@@ -112,104 +147,81 @@ fun InspectionScreen(
                             viewModel.inferInteractivePoint(x, y, imageWidth, imageHeight)
                         },
                         onBox = { x1, y1, x2, y2 ->
-                            viewModel.selectCorrectionRoi(
-                                uri = selectedImageUri,
-                                x1 = x1,
-                                y1 = y1,
-                                x2 = x2,
-                                y2 = y2,
-                                imageWidth = imageWidth,
-                                imageHeight = imageHeight,
-                            )
+                            selectedImageUri?.let { uri ->
+                                viewModel.selectCorrectionRoi(
+                                    uri = uri,
+                                    x1 = x1,
+                                    y1 = y1,
+                                    x2 = x2,
+                                    y2 = y2,
+                                    imageWidth = imageWidth,
+                                    imageHeight = imageHeight,
+                                )
+                            }
                         },
                     )
                 }
-                InteractiveImagePanel(
-                    title = if (correctionEnabled) "对比（可点选/框选）" else "处理后对比",
-                    imageUri = selectedImageUri,
-                    overlayBitmap = overlayBitmap,
-                    correctionEnabled = correctionEnabled && selectedImageUri != null,
-                    imageWidth = imageWidth,
-                    imageHeight = imageHeight,
-                    interactivePoints = uiState.interactivePoints,
-                    onTap = { x, y ->
-                        viewModel.inferInteractivePoint(x, y, imageWidth, imageHeight)
-                    },
-                    onBox = { x1, y1, x2, y2 ->
-                        selectedImageUri?.let { uri ->
-                            viewModel.selectCorrectionRoi(
-                                uri = uri,
-                                x1 = x1,
-                                y1 = y1,
-                                x2 = x2,
-                                y2 = y2,
-                                imageWidth = imageWidth,
-                                imageHeight = imageHeight,
-                            )
-                        }
-                    },
-                )
             }
-        }
 
-        Spacer(modifier = Modifier.height(20.dp))
+            Spacer(modifier = Modifier.height(20.dp))
 
-        if (uiState.isLoadingModel || uiState.isInferring) {
-            CircularProgressIndicator()
-            Spacer(modifier = Modifier.height(12.dp))
-        }
+            if (uiState.isLoadingModel || uiState.isInferring) {
+                CircularProgressIndicator(color = SkyEdgeColors.Green)
+                Spacer(modifier = Modifier.height(12.dp))
+            }
 
-        if (!embedded) {
-            Button(
-                onClick = onPickImage,
-                enabled = uiState.isModelReady && !uiState.isInferring,
-            ) {
-                Text(
-                    when {
+            if (!embedded) {
+                SkyPrimaryButton(
+                    text = when {
                         uiState.isLoadingModel -> "模型加载中"
                         !uiState.isModelReady -> "模型未就绪"
                         uiState.isInferring -> "处理中"
                         else -> "导入现场照片"
                     },
+                    onClick = onPickImage,
+                    enabled = uiState.isModelReady && !uiState.isInferring,
                 )
+                Spacer(modifier = Modifier.height(12.dp))
+                SkySecondaryButton(
+                    text = "Building 修正演示（无需选图）",
+                    onClick = { viewModel.runMobileSamDemo("building_demo") },
+                    enabled = uiState.isModelReady && !uiState.isInferring,
+                )
+                Spacer(modifier = Modifier.height(20.dp))
             }
-
-            Spacer(modifier = Modifier.height(12.dp))
-            Button(
-                onClick = { viewModel.runMobileSamDemo("building_demo") },
-                enabled = uiState.isModelReady && !uiState.isInferring,
-            ) {
-                Text("Building 修正演示（无需选图）")
-            }
-
-            Spacer(modifier = Modifier.height(20.dp))
-        }
-        Text(text = uiState.statusMessage)
-
-        if (!embedded && uiState.recentRecords.isNotEmpty()) {
-            Spacer(modifier = Modifier.height(16.dp))
             Text(
-                text = "本地检测记录（Room）",
-                style = MaterialTheme.typography.titleSmall,
+                text = uiState.statusMessage,
+                style = MaterialTheme.typography.bodySmall,
+                color = SkyEdgeColors.Muted,
             )
-            Spacer(modifier = Modifier.height(8.dp))
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(max = 180.dp)
-                    .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                uiState.recentRecords.forEach { item ->
-                    Text(
-                        text = buildString {
-                            append("[${item.status}] ${item.analyseType}")
-                            if (item.detail.isNotBlank()) append(" · ${item.detail}")
-                            append("\n")
-                            append(item.localUrl)
-                        },
-                        style = MaterialTheme.typography.bodySmall,
-                    )
+
+            if (!embedded && uiState.recentRecords.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(16.dp))
+                Text(
+                    text = "本地检测记录（Room）",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = SkyEdgeColors.Ink,
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 180.dp)
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    uiState.recentRecords.forEach { item ->
+                        Text(
+                            text = buildString {
+                                append("[${item.status}] ${item.analyseType}")
+                                if (item.detail.isNotBlank()) append(" · ${item.detail}")
+                                append("\n")
+                                append(item.localUrl)
+                            },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = SkyEdgeColors.Muted,
+                        )
+                    }
                 }
             }
         }
@@ -229,7 +241,7 @@ private fun InteractiveImagePanel(
     onBox: (x1: Float, y1: Float, x2: Float, y2: Float) -> Unit,
 ) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(title, style = MaterialTheme.typography.labelMedium)
+        Text(title, style = MaterialTheme.typography.labelMedium, color = SkyEdgeColors.Muted)
         Spacer(modifier = Modifier.height(6.dp))
         var viewSize by remember { mutableStateOf(IntSize.Zero) }
         var dragStart by remember { mutableStateOf<Offset?>(null) }
@@ -290,7 +302,7 @@ private fun InteractiveImagePanel(
                     val end = dragEnd
                     if (start != null && end != null) {
                         drawRect(
-                            color = Color(0xCC2196F3),
+                            color = SkyEdgeColors.Cyan.copy(alpha = 0.8f),
                             topLeft = Offset(minOf(start.x, end.x), minOf(start.y, end.y)),
                             size = androidx.compose.ui.geometry.Size(
                                 kotlin.math.abs(end.x - start.x),
@@ -313,24 +325,46 @@ private fun CorrectionStatusBanner(
     correctionEnabled: Boolean,
     roiActive: Boolean,
 ) {
-    val (containerColor, text) = when {
-        correctionEnabled -> Color(0xFFE8F5E9) to buildString {
-            append("✓ 可交互：单击=SAM 补漏（叠加）；框选=SAM 框内补漏（叠加）")
-            if (roiActive) append("（已按 Building 检测裁剪 ROI）")
-        }
-        preparingCorrection -> Color(0xFFFFF3E0) to "⏳ Building 已完成，正在编码修正区域（SAM 已在后台预热）…"
-        hasMask && hasImage -> Color(0xFFFFF3E0) to "⏳ 等待修正引擎就绪，请看下方状态栏是否出现「局部修正已就绪」"
-        hasImage -> Color(0xFFE3F2FD) to "① 导入后自动 Building 检测 → ② 等待修正就绪 → ③ 点选/框选"
-        else -> Color(0xFFECEFF1) to "请先导入现场照片"
+    val (containerColor, textColor, text) = when {
+        correctionEnabled -> Triple(
+            SkyEdgeColors.Field,
+            SkyEdgeColors.GreenDark,
+            buildString {
+                append("✓ 可交互：单击=SAM 补漏（叠加）；框选=SAM 框内补漏（叠加）")
+                if (roiActive) append("（已按 Building 检测裁剪 ROI）")
+            },
+        )
+        preparingCorrection -> Triple(
+            Color(0xFFF8F1E4),
+            SkyEdgeColors.Amber,
+            "⏳ Building 已完成，正在编码修正区域（SAM 已在后台预热）…",
+        )
+        hasMask && hasImage -> Triple(
+            Color(0xFFF8F1E4),
+            SkyEdgeColors.Amber,
+            "⏳ 等待修正引擎就绪，请看下方状态栏是否出现「局部修正已就绪」",
+        )
+        hasImage -> Triple(
+            Color(0xFFE8F3F5),
+            SkyEdgeColors.Cyan,
+            "① 导入后自动 Building 检测 → ② 等待修正就绪 → ③ 点选/框选",
+        )
+        else -> Triple(
+            SkyEdgeColors.Paper,
+            SkyEdgeColors.Muted,
+            "请先导入现场照片",
+        )
     }
     Surface(
         color = containerColor,
+        shape = RoundedCornerShape(8.dp),
         modifier = Modifier.fillMaxWidth(),
     ) {
         Text(
             text = text,
             modifier = Modifier.padding(12.dp),
             style = MaterialTheme.typography.bodySmall,
+            color = textColor,
         )
     }
 }

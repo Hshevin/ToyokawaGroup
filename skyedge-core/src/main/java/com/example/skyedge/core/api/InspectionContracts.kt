@@ -232,7 +232,7 @@ data class CompareSessionUiModel(
     val historicalImageUri: String? = null,
     val currentImageUri: String? = null,
     val slider: Float = 0.5f,
-    val samStatus: String = "MobileSAM 模型待算法侧交付",
+    val samStatus: String = "点选修正请在影像页操作（检测完成后可用）",
 )
 
 data class ModelChoice(

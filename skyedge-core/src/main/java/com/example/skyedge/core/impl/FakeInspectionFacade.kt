@@ -216,7 +216,12 @@ class FakeInspectionFacade(
     }
 
     override fun refineMaskAt(x: Float, y: Float) {
-        _state.value = _state.value.copy(statusMessage = "MobileSAM 模型待算法侧交付，已记录点选位置：$x,$y")
+        _state.value = _state.value.copy(
+            statusMessage = "已记录点选位置：$x,$y（Fake；真机请在影像页修正）",
+            compareSession = _state.value.compareSession.copy(
+                samStatus = "已记录点选 (${"%.2f".format(x)}, ${"%.2f".format(y)})",
+            ),
+        )
     }
 
     override fun setMapLayerVisibility(showOrtho: Boolean, showMask: Boolean) {
