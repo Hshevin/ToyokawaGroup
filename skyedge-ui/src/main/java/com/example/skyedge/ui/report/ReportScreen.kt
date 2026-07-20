@@ -14,12 +14,18 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
@@ -31,6 +37,7 @@ import com.example.skyedge.core.api.ReportFormat
 import com.example.skyedge.ui.inspection.InferenceViewModel
 import java.io.File
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ReportScreen(
     viewModel: InferenceViewModel,
@@ -43,6 +50,18 @@ fun ReportScreen(
     val context = LocalContext.current
     val task = uiState.activeTask
     val draft = uiState.reportDraft
+    var reportName by remember(task?.id) { mutableStateOf(task?.name.orEmpty()) }
+    var operator by remember(task?.id) { mutableStateOf(task?.operator.orEmpty()) }
+    var selectedFormats by remember(task?.id) {
+        mutableStateOf(
+            setOf(
+                ReportFormat.PDF,
+                ReportFormat.IMAGE,
+                ReportFormat.JSON,
+                ReportFormat.GEOJSON,
+            ),
+        )
+    }
 
     Column(
         modifier = modifier
@@ -52,27 +71,54 @@ fun ReportScreen(
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Text("报告", style = MaterialTheme.typography.headlineMedium)
-        Card(Modifier.fillMaxWidth()) {
+        Card(modifier.fillMaxWidth()) {
             Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text(task?.name ?: "未选择任务", style = MaterialTheme.typography.titleMedium)
+                OutlinedTextField(
+                    value = reportName,
+                    onValueChange = { reportName = it },
+                    label = { Text("报告名称") },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                OutlinedTextField(
+                    value = operator,
+                    onValueChange = { operator = it },
+                    label = { Text("核查人员") },
+                    modifier = Modifier.fillMaxWidth(),
+                )
                 Text("状态：${task?.status?.label ?: "-"}")
                 Text("建筑对象：${draft?.objectCount ?: 0}")
                 Text("已标注：${draft?.confirmedCount ?: 0} · 已排除：${draft?.rejectedCount ?: 0}")
                 draft?.typeCounts?.forEach { (type, count) ->
                     Text("${type.label}: $count", style = MaterialTheme.typography.bodySmall)
                 }
+                Text("导出格式", style = MaterialTheme.typography.titleSmall)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf(
+                        ReportFormat.PDF,
+                        ReportFormat.IMAGE,
+                        ReportFormat.JSON,
+                        ReportFormat.GEOJSON,
+                    ).forEach { format ->
+                        FilterChip(
+                            selected = selectedFormats.contains(format),
+                            onClick = {
+                                selectedFormats = if (selectedFormats.contains(format)) {
+                                    selectedFormats - format
+                                } else {
+                                    selectedFormats + format
+                                }
+                            },
+                            label = { Text(format.label) },
+                        )
+                    }
+                }
                 Button(
                     onClick = {
                         task?.let {
                             viewModel.exportReport(
                                 it.id,
-                                setOf(
-                                    ReportFormat.IMAGE,
-                                    ReportFormat.JSON,
-                                    ReportFormat.CSV,
-                                    ReportFormat.PDF,
-                                    ReportFormat.GEOJSON,
-                                ),
+                                selectedFormats.ifEmpty { setOf(ReportFormat.PDF) },
                             )
                         }
                     },
@@ -162,8 +208,8 @@ private fun ExportedFiles(files: Map<ReportFormat, String>) {
 
 @Composable
 private fun AnomalyDetailList(anomalies: List<AnomalyUiModel>) {
-    Card(Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+    Card(modifier.fillMaxWidth()) {
+        Column(modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Text("建筑明细", style = MaterialTheme.typography.titleMedium)
             anomalies.forEach { anomaly ->
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
@@ -210,8 +256,8 @@ private fun DisasterSection(
     onFinish: () -> Unit,
     onReset: () -> Unit,
 ) {
-    Card(Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Card(modifier.fillMaxWidth()) {
+        Column(modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("灾害范围校正", style = MaterialTheme.typography.titleMedium)
             Text("定位点：$pointCount 个 · 状态：${if (isClosed) "已闭合" else if (isCollecting) "采集中" else "未采集"}")
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -235,8 +281,8 @@ private fun CompareSection(
     onSlider: (Float) -> Unit,
     onSamClick: () -> Unit,
 ) {
-    Card(Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Card(modifier.fillMaxWidth()) {
+        Column(modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("双时相对比与点选修正", style = MaterialTheme.typography.titleMedium)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedButton(onClick = onPickHistoricalImage) { Text("选择历史图") }

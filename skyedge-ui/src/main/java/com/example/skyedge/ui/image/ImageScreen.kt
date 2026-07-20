@@ -51,9 +51,8 @@ fun ImageScreen(
         ) {
             Text("影像导入", style = MaterialTheme.typography.headlineMedium)
             Text(
-                "按文件格式自动分流：.tif/.tiff/.geotiff 覆盖到地图；普通照片仅本地识别、不上图。",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                "导入影像后端侧会自动识别文件格式：GeoTIFF 按坐标覆盖到高德卫星底图，普通图片直接进入建筑识别。",
+                style = MaterialTheme.typography.bodyMedium,
             )
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 viewModel.modelChoices.forEach { choice ->

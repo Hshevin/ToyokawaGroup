@@ -144,7 +144,13 @@ class MainActivity : ComponentActivity() {
                         onPickImage = {
                             // SAF OpenDocument covers photos + GeoTIFF; no media permission required.
                             importImageLauncher.launch(
-                                arrayOf("image/*", "image/tiff", "image/x-tiff", "*/*"),
+                                arrayOf(
+                                    "image/*",
+                                    "image/tiff",
+                                    "image/x-tiff",
+                                    "application/octet-stream",
+                                    "*/*",
+                                ),
                             )
                         },
                         onLoadSample = { assetPath ->
