@@ -5,11 +5,33 @@ import java.io.File
 import java.io.FileOutputStream
 
 object ModelLoader {
+    /** Resolve model paths relative to the directory containing model_spec.json. */
+    fun resolveAssetPath(specAsset: String?, assetPath: String): String {
+        if (assetPath.startsWith("models/")) return assetPath
+        val base = specAsset?.substringBeforeLast('/')?.takeIf { it.isNotEmpty() } ?: return assetPath
+        return "$base/$assetPath"
+    }
+
     fun assetExists(context: Context, assetName: String): Boolean =
         runCatching {
             context.assets.open(assetName).close()
             true
         }.getOrDefault(false)
+
+    fun assetLength(context: Context, assetName: String): Long =
+        runCatching { context.assets.openFd(assetName).use { it.length } }
+            .getOrElse {
+                context.assets.open(assetName).use { stream ->
+                    var total = 0L
+                    val buffer = ByteArray(8 * 1024)
+                    while (true) {
+                        val read = stream.read(buffer)
+                        if (read <= 0) break
+                        total += read
+                    }
+                    total
+                }
+            }
 
     fun resolveModelAsset(context: Context, assetName: String, cacheToken: String): String {
         if (assetName.endsWith(".fp8pkg")) {

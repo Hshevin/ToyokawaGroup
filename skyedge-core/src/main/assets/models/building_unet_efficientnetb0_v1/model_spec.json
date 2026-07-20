@@ -1,16 +1,6 @@
-﻿{
-  "model_id": "building_unet_efficientnetb0_v1",
-  "asset_file": "optimized/building_unet_efficientnetb0_v1_pruned_fp8.fp8pkg",
-  "optimization": {
-    "prune": "structured_s2_0.08_0.15_0.25",
-    "quantization": "fp8_e4m3fn_per_tensor_skip_decoder"
-  },
-  "quantization": {
-    "method": "fp8_e4m3fn_weight_only",
-    "granularity": "per_tensor",
-    "runtime_asset": "optimized/building_unet_efficientnetb0_v1_pruned_fp8_runtime.pt",
-    "packed_size_mb": 2.38
-  },
+{
+  "model_id": "bld_qp_q1_p1s2_v1",
+  "asset_file": "models/building_unet_efficientnetb0_v1/optimized/bld_qp_q1_p1s2_v1_android.pt",
   "task_type": "segmentation",
   "target": "building",
   "input": {
@@ -39,12 +29,15 @@
       512
     ],
     "postprocess": "sigmoid_threshold",
-    "threshold": 0.7499999999999999
+    "threshold": 0.7
   },
   "num_classes": 2,
   "class_names": [
     "background",
     "building"
-  ]
+  ],
+  "source_exp_module": "QP",
+  "quant_method": "Q1",
+  "prune_method": "unstructured_l1",
+  "prune_tier": "S2"
 }
-

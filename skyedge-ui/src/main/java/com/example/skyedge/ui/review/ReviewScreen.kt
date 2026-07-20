@@ -1,5 +1,6 @@
-package com.example.skyedge.ui.review
+﻿package com.example.skyedge.ui.review
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -38,12 +39,12 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -52,6 +53,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
@@ -85,17 +87,14 @@ import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
 
+private val SkyGreen = Color(0xFF23834F)
+private val PageBg = Color(0xFFF5F8F2)
+private val CardBg = Color.White
+private val Muted = Color(0xFF5D6A70)
+
 /**
- * 建筑标注页（场景一 · 人工核查）
- *
- * 视觉对齐 docs/goals/示例渲染图04.png：
- *  - 顶部：场景小标签 + 标题「建筑标注」 + 右上「人工核查」胶囊
- *  - 中部：全宽影像，绿 mask + 黄色 bbox 描边 + 黄色定位针
- *  - 拖拽 handle：分页指示条
- *  - 「建筑详情」白色卡片：标题栏右侧保存校正 / 取消校正
- *  - 编号 / 位置 / 疑似图斑位置 / 形式 / 人工复核 / 复核时间
- *
- * 不依赖场景二（灾害范围），由 [ReviewScreen] 调用方传入。
+ * 建筑标注页（人工核查）。
+ * 布局/配色对齐任务、影像、报告页（浅绿底 + 白卡片 + #23834F）。
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -103,46 +102,98 @@ fun ReviewScreen(
     viewModel: InferenceViewModel,
     onTakePhoto: (String) -> Unit,
     modifier: Modifier = Modifier,
+    showHeader: Boolean = true,
+    onGoReport: (() -> Unit)? = null,
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     var dragStart by remember { mutableStateOf<Offset?>(null) }
     var dragEnd by remember { mutableStateOf<Offset?>(null) }
     val activeTask = uiState.activeTask
     val anomalies = uiState.anomalies
+    // 仅展示当前选中的对象；不要回退到 first，否则点 × 关闭后卡片仍会立刻弹回
     val selected = anomalies.firstOrNull { it.id == uiState.selectedAnomalyId }
-        ?: anomalies.firstOrNull()
-    val activeRecord = remember(uiState.recentRecords, selected?.imageLocalUrl) {
+    val activeRecord = remember(uiState.recentRecords, selected?.imageLocalUrl, anomalies) {
         selected?.imageLocalUrl?.let { localUrl ->
             uiState.recentRecords.firstOrNull { it.localUrl == localUrl }
         } ?: uiState.recentRecords.firstOrNull()
+    }
+    val visibleAnomalies = remember(anomalies, activeRecord?.localUrl) {
+        val imageUrl = activeRecord?.localUrl
+        if (imageUrl.isNullOrBlank()) anomalies
+        else anomalies.filter { it.imageLocalUrl == imageUrl || it.imageLocalUrl.isNullOrBlank() }
+    }
+
+    LaunchedEffect(activeTask?.id) {
+        viewModel.refreshAnomalyLocations()
     }
     val overlayBitmap = remember(uiState.lastMaskPath, uiState.selectedModelKey) {
         buildMaskOverlay(uiState.lastMaskPath, uiState.selectedModelKey)
     }
 
-    // 若已选中或首次进入，自动选中第一栋，保证详情卡可用
-    LaunchedEffect(anomalies, uiState.selectedAnomalyId) {
-        if (uiState.selectedAnomalyId == null && anomalies.isNotEmpty()) {
+    // 仅首次进入且尚无选中时自动选中第一栋；用户点 × 清空后不再强行选回
+    var didInitialSelect by remember(activeTask?.id) { mutableStateOf(false) }
+    LaunchedEffect(anomalies, uiState.selectedAnomalyId, didInitialSelect) {
+        if (!didInitialSelect && uiState.selectedAnomalyId == null && anomalies.isNotEmpty()) {
             viewModel.selectAnomaly(anomalies.first().id)
+            didInitialSelect = true
+        }
+        if (uiState.selectedAnomalyId != null) {
+            didInitialSelect = true
         }
     }
 
     Column(
         modifier = modifier
             .fillMaxSize()
+            .background(PageBg)
             .verticalScroll(rememberScrollState())
             .imePadding()
-            .padding(horizontal = 14.dp, vertical = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        // 顶部：场景小标签 + 标题 + 右上「人工核查」胶囊
-        ReviewHeader(activeTaskName = activeTask?.name, sceneLabel = "城市建筑场景")
+        if (showHeader) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.Top,
+            ) {
+                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(
+                        "建筑标注",
+                        style = MaterialTheme.typography.headlineMedium,
+                        fontWeight = FontWeight.Black,
+                    )
+                    Text(
+                        "点击建筑框切换对象；拖拽可新增框选；下方填写人工标注。",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Muted,
+                    )
+                }
+                ReviewChromePill(text = "人工核查")
+            }
+        }
 
-        // 影像区：原图 + 绿 mask + 黄色 bbox + 黄色定位针
+        val currentTask = activeTask
+        if (currentTask != null && currentTask.name.isNotBlank()) {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFFEAF3E9)),
+                shape = RoundedCornerShape(10.dp),
+            ) {
+                Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text("当前任务", color = SkyGreen, fontWeight = FontWeight.Bold)
+                    Text(
+                        "${currentTask.name} · ${currentTask.status.label}",
+                        fontWeight = FontWeight.Black,
+                    )
+                }
+            }
+        }
+
         AnnotationImageCanvas(
             imageUri = activeRecord?.sourceUri,
             overlayBitmap = overlayBitmap,
-            anomalies = anomalies,
+            anomalies = visibleAnomalies,
             selectedId = selected?.id,
             dragStart = dragStart,
             dragEnd = dragEnd,
@@ -175,14 +226,12 @@ fun ReviewScreen(
             },
         )
 
-        // 拖拽 handle：分页指示条
         PagerIndicator(
             total = anomalies.size.coerceAtLeast(1),
             current = anomalies.indexOfFirst { it.id == selected?.id }
                 .let { if (it < 0) 0 else it },
         )
 
-        // 「建筑详情」卡片
         if (selected != null) {
             AnnotationDetailCard(
                 anomaly = selected,
@@ -223,12 +272,11 @@ fun ReviewScreen(
             )
         }
 
-        // 候选建筑列表（横向缩略图，便于左右切换）
         if (anomalies.size > 1) {
             Text(
                 text = "候选建筑（${anomalies.size}）",
-                style = MaterialTheme.typography.titleSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Black,
             )
             LazyRow(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -251,65 +299,34 @@ fun ReviewScreen(
                 "点击影像中的建筑框或下方候选卡切换；拖拽影像可新增框选。"
             },
             style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            color = Muted,
         )
-    }
-}
-
-@Composable
-private fun ReviewHeader(activeTaskName: String?, sceneLabel: String) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween,
-    ) {
-        Column {
-            Text(
-                text = sceneLabel,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Text(
-                text = "建筑标注",
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.SemiBold,
-            )
-            if (!activeTaskName.isNullOrBlank()) {
-                Text(
-                    text = activeTaskName,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+        if (onGoReport != null) {
+            Button(
+                onClick = onGoReport,
+                enabled = anomalies.isNotEmpty(),
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.buttonColors(containerColor = SkyGreen),
+                shape = RoundedCornerShape(10.dp),
+            ) {
+                Text("导出报告", fontWeight = FontWeight.Bold)
             }
         }
-        StatusPill(text = "人工核查")
     }
 }
 
 @Composable
-private fun StatusPill(text: String) {
-    Surface(
-        shape = RoundedCornerShape(50),
-        color = Color(0xFFE8F5E9),
-        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF66BB6A)),
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(6.dp)
-                    .background(Color(0xFF2E7D32), shape = CircleShape),
-            )
-            Text(
-                text = text,
-                style = MaterialTheme.typography.labelMedium,
-                color = Color(0xFF2E7D32),
-            )
-        }
-    }
+private fun ReviewChromePill(text: String) {
+    Text(
+        text = text,
+        modifier = Modifier
+            .clip(RoundedCornerShape(999.dp))
+            .background(Color(0xFFEAF3E9))
+            .padding(horizontal = 10.dp, vertical = 5.dp),
+        color = SkyGreen,
+        style = MaterialTheme.typography.bodySmall,
+        fontWeight = FontWeight.Bold,
+    )
 }
 
 @Composable
@@ -330,8 +347,8 @@ private fun AnnotationImageCanvas(
         modifier = Modifier
             .fillMaxWidth()
             .heightIn(min = 220.dp, max = 320.dp),
-        shape = RoundedCornerShape(14.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+        shape = RoundedCornerShape(10.dp),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFFDDE8D8)),
     ) {
         Box(
             modifier = Modifier
@@ -483,7 +500,7 @@ private fun PagerIndicator(total: Int, current: Int) {
                     .height(6.dp)
                     .width(if (active) 16.dp else 6.dp)
                     .background(
-                        if (active) Color(0xFF388E3C) else Color(0xFFC8E6C9),
+                        if (active) SkyGreen else Color(0xFFC8E6C9),
                         RoundedCornerShape(50),
                     ),
             )
@@ -500,33 +517,39 @@ private fun AnnotationDetailCard(
     onCancel: () -> Unit,
 ) {
     var code by remember(anomaly.id) { mutableStateOf(anomaly.buildingCode) }
-    var location by remember(anomaly.id) {
-        mutableStateOf(
-            anomaly.location.ifBlank {
-                GeoAnomalyLocationResolver.fallbackPercentLabel(anomaly.bbox)
-            },
-        )
-    }
+    var location by remember(anomaly.id) { mutableStateOf(anomaly.location) }
     var comment by remember(anomaly.id) { mutableStateOf(anomaly.comment) }
     var type by remember(anomaly.id) { mutableStateOf(anomaly.anomalyType) }
     var reviewStatus by remember(anomaly.id) { mutableStateOf(anomaly.reviewStatus) }
+    var locationDirty by remember(anomaly.id) { mutableStateOf(false) }
     val focusManager = LocalFocusManager.current
+    val percentHint = remember(anomaly.bbox) {
+        GeoAnomalyLocationResolver.fallbackPercentLabel(anomaly.bbox)
+    }
 
     LaunchedEffect(anomaly.id) {
         code = anomaly.buildingCode
-        location = anomaly.location.ifBlank {
-            GeoAnomalyLocationResolver.fallbackPercentLabel(anomaly.bbox)
-        }
+        location = anomaly.location
+        locationDirty = false
         comment = anomaly.comment
         type = anomaly.anomalyType
         reviewStatus = anomaly.reviewStatus
+    }
+
+    LaunchedEffect(anomaly.location) {
+        if (!locationDirty && anomaly.location.isNotBlank()) {
+            location = anomaly.location
+        }
     }
 
     LaunchedEffect(anomaly.reviewStatus) {
         reviewStatus = anomaly.reviewStatus
     }
 
-    LaunchedEffect(code, location, comment, type) {
+    LaunchedEffect(code, location, comment, type, locationDirty) {
+        if (GeoAnomalyLocationResolver.looksLikePercentFallback(location) && !locationDirty) {
+            return@LaunchedEffect
+        }
         onUpdate(
             AnomalyUpdateRequest(
                 buildingCode = code,
@@ -539,9 +562,9 @@ private fun AnnotationDetailCard(
 
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(14.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+        shape = RoundedCornerShape(10.dp),
+        colors = CardDefaults.cardColors(containerColor = CardBg),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
     ) {
         Column(
             modifier = Modifier.padding(14.dp),
@@ -550,77 +573,85 @@ private fun AnnotationDetailCard(
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
+                verticalAlignment = Alignment.Top,
             ) {
-                Text(
-                    text = "建筑详情",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.weight(1f, fill = false),
-                )
-                AnnotationDetailActions(
-                    savedStatus = anomaly.reviewStatus,
-                    draftStatus = reviewStatus,
-                    onCancel = onCancel,
-                    onSave = { onSaveReview(type, comment, reviewStatus) },
-                )
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(
+                        text = "建筑对象",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Muted,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Text(
+                        text = code.ifBlank { anomaly.id.take(8).uppercase() },
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Black,
+                        color = Color(0xFF1F2A2E),
+                    )
+                }
+                TextButton(
+                    onClick = onCancel,
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
+                ) {
+                    Text("×", style = MaterialTheme.typography.headlineSmall, color = Muted)
+                }
             }
             if (anomaly.photoPaths.isNotEmpty()) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(
                         modifier = Modifier
                             .size(8.dp)
-                            .background(Color(0xFF4CAF50), CircleShape),
+                            .background(SkyGreen, CircleShape),
                     )
                     Spacer(modifier = Modifier.width(4.dp))
                     Text(
                         text = "附件 ${anomaly.photoPaths.size}",
                         style = MaterialTheme.typography.labelSmall,
-                        color = Color(0xFF4CAF50),
+                        color = SkyGreen,
                     )
                 }
             }
 
-            // 建筑编号 / 位置
+            OutlinedTextField(
+                value = code,
+                onValueChange = { code = it },
+                label = { Text("建筑编号") },
+                placeholder = { Text("如 B-023") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            OutlinedTextField(
+                value = location,
+                onValueChange = {
+                    location = it
+                    locationDirty = true
+                },
+                label = { Text("建筑位置") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+                placeholder = {
+                    Text(if (location.isBlank()) percentHint else "填写现场位置或地块名称")
+                },
+                supportingText = { Text("支持手动修改；GeoTIFF 模式下会回填经纬度") },
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() }),
+            )
+
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
             ) {
-                OutlinedTextField(
-                    value = code,
-                    onValueChange = { code = it },
-                    label = { Text("建筑编号") },
-                    singleLine = true,
-                    modifier = Modifier.weight(1f),
-                )
-                OutlinedTextField(
-                    value = location,
-                    onValueChange = { location = it },
-                    label = { Text("位置") },
-                    singleLine = true,
-                    modifier = Modifier.weight(1f),
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                    keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() }),
+                Text("来源", style = MaterialTheme.typography.bodySmall, color = Muted)
+                Text(
+                    text = anomaly.source.ifBlank { "建筑识别自动圈定" },
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color(0xFF1F2A2E),
                 )
             }
 
-            // 建筑物疑似图斑位置
-            OutlinedTextField(
-                value = anomaly.location.ifBlank {
-                    GeoAnomalyLocationResolver.fallbackPercentLabel(anomaly.bbox)
-                },
-                onValueChange = { location = it },
-                label = { Text("建筑物疑似图斑位置") },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
-                supportingText = { Text("支持手动修改；GeoTIFF 模式下会回填经纬度") },
-            )
-
-            HorizontalDivider()
-
-            // 形式：状态 chip 行
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text("形式", style = MaterialTheme.typography.labelLarge)
+                Text("状态", style = MaterialTheme.typography.labelLarge, color = Color(0xFF1F2A2E))
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                     modifier = Modifier.fillMaxWidth(),
@@ -631,52 +662,45 @@ private fun AnnotationDetailCard(
                             selected = selected,
                             onClick = { reviewStatus = choice.status },
                             label = { Text(choice.label) },
-                            leadingIcon = if (selected) {
-                                {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(8.dp)
-                                            .background(Color(0xFF2E7D32), CircleShape),
-                                    )
-                                }
-                            } else null,
                             colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = Color(0xFFE8F5E9),
+                                selectedContainerColor = Color(0xFFEAF3E9),
+                                selectedLabelColor = SkyGreen,
+                                containerColor = CardBg,
+                                labelColor = Muted,
+                            ),
+                            border = FilterChipDefaults.filterChipBorder(
+                                enabled = true,
+                                selected = selected,
+                                borderColor = Color(0xFFD8DED8),
+                                selectedBorderColor = SkyGreen.copy(alpha = 0.45f),
                             ),
                         )
                     }
                 }
             }
 
-            // 人工复核：类型 chip 行
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text("人工复核", style = MaterialTheme.typography.labelLarge)
+                Text("人工标注", style = MaterialTheme.typography.labelLarge, color = Color(0xFF1F2A2E))
                 TypeChipsGrid(type = type, onTypeChange = { type = it })
             }
 
-            // 复核时间
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text("复核时间", style = MaterialTheme.typography.labelLarge)
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                AssistChip(
+                    onClick = onTakePhoto,
+                    label = { Text("添加拍摄现场照片") },
                     modifier = Modifier.fillMaxWidth(),
-                ) {
-                    AssistChip(
-                        onClick = onTakePhoto,
-                        label = { Text("+ 增加编改附件") },
-                        colors = AssistChipDefaults.assistChipColors(
-                            containerColor = Color(0xFFE3F2FD),
-                            labelColor = Color(0xFF1565C0),
-                        ),
-                    )
-                    val ts = formatRelativeTime(anomaly.updatedAt)
-                    Text(
-                        text = ts,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
+                    colors = AssistChipDefaults.assistChipColors(
+                        containerColor = Color(0xFFEAF3E9),
+                        labelColor = SkyGreen,
+                    ),
+                    border = BorderStroke(1.dp, SkyGreen.copy(alpha = 0.45f)),
+                )
+                val ts = formatRelativeTime(anomaly.updatedAt)
+                Text(
+                    text = "最近更新：$ts",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Muted,
+                )
                 if (anomaly.photoPaths.isNotEmpty()) {
                     LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         items(anomaly.photoPaths) { path ->
@@ -686,7 +710,7 @@ private fun AnnotationDetailCard(
                                 contentScale = ContentScale.Crop,
                                 modifier = Modifier
                                     .size(56.dp)
-                                    .border(1.dp, Color(0xFFE0E0E0), RoundedCornerShape(6.dp)),
+                                    .border(1.dp, Color(0xFFD8DED8), RoundedCornerShape(6.dp)),
                             )
                         }
                     }
@@ -701,6 +725,12 @@ private fun AnnotationDetailCard(
                 )
             }
 
+            AnnotationDetailActions(
+                savedStatus = anomaly.reviewStatus,
+                draftStatus = reviewStatus,
+                onCancel = onCancel,
+                onSave = { onSaveReview(type, comment, reviewStatus) },
+            )
         }
     }
 }
@@ -712,7 +742,6 @@ private fun AnnotationDetailActions(
     onCancel: () -> Unit,
     onSave: () -> Unit,
 ) {
-    val compactPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
     val alreadySaved = when (savedStatus) {
         ReviewStatusUi.PENDING -> false
         ReviewStatusUi.CONFIRMED -> draftStatus == ReviewStatusUi.CONFIRMED ||
@@ -725,22 +754,16 @@ private fun AnnotationDetailActions(
         alreadySaved && savedStatus == ReviewStatusUi.REJECTED -> "核验有误"
         alreadySaved -> "已保存"
         draftStatus == ReviewStatusUi.REJECTED -> "确认排除"
-        else -> "保存校正"
+        else -> "保存标注"
     }
-    Row(
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        OutlinedButton(
-            onClick = onCancel,
-            contentPadding = compactPadding,
-        ) {
-            Text("取消", style = MaterialTheme.typography.labelLarge)
-        }
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Button(
             onClick = onSave,
             enabled = !alreadySaved,
-            contentPadding = compactPadding,
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 54.dp),
+            shape = RoundedCornerShape(10.dp),
             colors = when {
                 alreadySaved && savedStatus == ReviewStatusUi.REJECTED -> ButtonDefaults.buttonColors(
                     containerColor = MaterialTheme.colorScheme.errorContainer,
@@ -749,14 +772,31 @@ private fun AnnotationDetailActions(
                     disabledContentColor = MaterialTheme.colorScheme.onErrorContainer,
                 )
                 alreadySaved -> ButtonDefaults.buttonColors(
-                    containerColor = Color(0xFF388E3C),
-                    disabledContainerColor = Color(0xFF388E3C),
+                    containerColor = SkyGreen,
+                    disabledContainerColor = SkyGreen,
                     disabledContentColor = Color.White.copy(alpha = 0.8f),
                 )
-                else -> ButtonDefaults.buttonColors(containerColor = Color(0xFF388E3C))
+                else -> ButtonDefaults.buttonColors(
+                    containerColor = SkyGreen,
+                    contentColor = Color.White,
+                )
             },
         ) {
-            Text(saveLabel, style = MaterialTheme.typography.labelLarge)
+            Text(saveLabel, fontWeight = FontWeight.Bold)
+        }
+        OutlinedButton(
+            onClick = onCancel,
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 48.dp),
+            shape = RoundedCornerShape(10.dp),
+            colors = ButtonDefaults.outlinedButtonColors(
+                containerColor = Color.White,
+                contentColor = Color(0xFF1F2A2E),
+            ),
+            border = BorderStroke(1.dp, Color(0xFFD8DED8)),
+        ) {
+            Text("取消标注", fontWeight = FontWeight.Bold)
         }
     }
 }
@@ -769,11 +809,17 @@ private enum class StatusChoice(
     ANNOTATED(ReviewStatusUi.CONFIRMED, "已标注"),
     VERIFIED(ReviewStatusUi.VERIFIED, "已核验"),
     PENDING(ReviewStatusUi.PENDING, "未标注"),
-    ERROR(ReviewStatusUi.REJECTED, "核验有误"),
+    ERROR(ReviewStatusUi.REJECTED, "已排除"),
 }
 
 @Composable
 private fun TypeChipsGrid(type: AnomalyTypeUi, onTypeChange: (AnomalyTypeUi) -> Unit) {
+    val chipColors = FilterChipDefaults.filterChipColors(
+        selectedContainerColor = Color(0xFFEAF3E9),
+        selectedLabelColor = SkyGreen,
+        containerColor = CardBg,
+        labelColor = Muted,
+    )
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Row(
             horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -785,6 +831,7 @@ private fun TypeChipsGrid(type: AnomalyTypeUi, onTypeChange: (AnomalyTypeUi) -> 
                     onClick = { onTypeChange(item) },
                     label = { Text(item.label) },
                     modifier = Modifier.weight(1f),
+                    colors = chipColors,
                 )
             }
         }
@@ -798,6 +845,7 @@ private fun TypeChipsGrid(type: AnomalyTypeUi, onTypeChange: (AnomalyTypeUi) -> 
                     onClick = { onTypeChange(item) },
                     label = { Text(item.label) },
                     modifier = Modifier.weight(1f),
+                    colors = chipColors,
                 )
             }
         }
@@ -811,6 +859,7 @@ private fun TypeChipsGrid(type: AnomalyTypeUi, onTypeChange: (AnomalyTypeUi) -> 
                     onClick = { onTypeChange(item) },
                     label = { Text(item.label) },
                     modifier = Modifier.weight(1f),
+                    colors = chipColors,
                 )
             }
         }
@@ -823,18 +872,29 @@ private fun EmptyAnnotationCard(onPickAnomaly: () -> Unit) {
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onPickAnomaly),
-        shape = RoundedCornerShape(14.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        shape = RoundedCornerShape(10.dp),
+        colors = CardDefaults.cardColors(containerColor = CardBg),
     ) {
         Column(
-            modifier = Modifier.padding(18.dp),
+            modifier = Modifier.padding(14.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            Text("建筑详情", style = MaterialTheme.typography.titleMedium)
+            Text(
+                "建筑对象",
+                style = MaterialTheme.typography.bodySmall,
+                color = Muted,
+                fontWeight = FontWeight.Bold,
+            )
+            Text(
+                "暂无选中建筑",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Black,
+                color = Color(0xFF1F2A2E),
+            )
             Text(
                 text = "请先在影像页导入图片并完成 Building 检测，或点击下方候选建筑切换。",
                 style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = Muted,
             )
         }
     }
@@ -846,12 +906,12 @@ private fun AnomalyChip(
     isSelected: Boolean,
     onClick: () -> Unit,
 ) {
-    val borderColor = if (isSelected) Color(0xFF388E3C) else Color(0xFFE0E0E0)
-    val container = if (isSelected) Color(0xFFE8F5E9) else MaterialTheme.colorScheme.surface
+    val borderColor = if (isSelected) SkyGreen else Color(0xFFD8DED8)
+    val container = if (isSelected) Color(0xFFEAF3E9) else CardBg
     Surface(
         shape = RoundedCornerShape(10.dp),
         color = container,
-        border = androidx.compose.foundation.BorderStroke(
+        border = BorderStroke(
             if (isSelected) 2.dp else 1.dp,
             borderColor,
         ),
@@ -869,19 +929,19 @@ private fun AnomalyChip(
                     contentScale = ContentScale.Crop,
                     modifier = Modifier
                         .size(40.dp)
-                        .border(1.dp, Color(0xFFE0E0E0), RoundedCornerShape(6.dp)),
+                        .border(1.dp, Color(0xFFD8DED8), RoundedCornerShape(6.dp)),
                 )
             }
             Column {
                 Text(
                     text = anomaly.buildingCode.ifBlank { anomaly.id.take(8) },
                     style = MaterialTheme.typography.labelLarge,
-                    color = if (isSelected) Color(0xFF1B5E20) else MaterialTheme.colorScheme.onSurface,
+                    color = if (isSelected) SkyGreen else Color(0xFF1F2A2E),
                 )
                 Text(
                     text = anomaly.anomalyType.label,
                     style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = Muted,
                 )
             }
         }
