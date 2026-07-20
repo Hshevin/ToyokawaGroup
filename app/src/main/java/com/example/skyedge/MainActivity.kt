@@ -17,6 +17,7 @@ import androidx.activity.viewModels
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.getValue
@@ -33,6 +34,8 @@ import com.example.skyedge.ui.inspection.InferenceViewModel
 import com.example.skyedge.ui.report.ReportScreen
 import com.example.skyedge.ui.review.ReviewScreen
 import com.example.skyedge.ui.task.TaskScreen
+import com.example.skyedge.ui.theme.SkyEdgeColors
+import com.example.skyedge.ui.theme.SkyEdgeTheme
 import java.io.File
 import java.io.FileOutputStream
 import org.json.JSONObject
@@ -51,6 +54,7 @@ class MainActivity : ComponentActivity() {
         }
 
         setContent {
+            SkyEdgeTheme {
             var selectedTab by rememberSaveable { mutableStateOf(AppTab.TASK) }
             val importImageLauncher = rememberLauncherForActivityResult(
                 contract = ActivityResultContracts.OpenDocument(),
@@ -120,14 +124,25 @@ class MainActivity : ComponentActivity() {
             )
 
             Scaffold(
+                containerColor = SkyEdgeColors.Paper,
                 bottomBar = {
-                    NavigationBar {
+                    NavigationBar(
+                        containerColor = SkyEdgeColors.Header,
+                        contentColor = SkyEdgeColors.Ink,
+                    ) {
                         AppTab.entries.forEach { tab ->
                             NavigationBarItem(
                                 selected = selectedTab == tab,
                                 onClick = { selectedTab = tab },
                                 label = { Text(tab.label) },
                                 icon = {},
+                                colors = NavigationBarItemDefaults.colors(
+                                    selectedIconColor = SkyEdgeColors.Green,
+                                    selectedTextColor = SkyEdgeColors.Green,
+                                    indicatorColor = SkyEdgeColors.Field,
+                                    unselectedIconColor = SkyEdgeColors.Muted,
+                                    unselectedTextColor = SkyEdgeColors.Muted,
+                                ),
                             )
                         }
                     }
@@ -198,6 +213,7 @@ class MainActivity : ComponentActivity() {
                         modifier = Modifier.padding(innerPadding),
                     )
                 }
+            }
             }
         }
     }

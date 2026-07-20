@@ -1,7 +1,6 @@
 package com.example.skyedge.ui.report
 
 import android.content.Intent
-import androidx.core.content.FileProvider
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -12,12 +11,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
@@ -26,15 +23,21 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.core.content.FileProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import com.example.skyedge.core.api.AnomalyUiModel
 import com.example.skyedge.core.api.ReportFormat
 import com.example.skyedge.ui.inspection.InferenceViewModel
+import com.example.skyedge.ui.theme.SkyEdgeColors
+import com.example.skyedge.ui.theme.SkyPanel
+import com.example.skyedge.ui.theme.SkyPrimaryButton
+import com.example.skyedge.ui.theme.SkyScreenHeader
+import com.example.skyedge.ui.theme.SkySecondaryButton
 import java.io.File
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -66,13 +69,14 @@ fun ReportScreen(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+            .verticalScroll(rememberScrollState()),
     ) {
-        Text("报告", style = MaterialTheme.typography.headlineMedium)
-        Card(modifier.fillMaxWidth()) {
-            Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        SkyScreenHeader(eyebrow = "报告导出", title = "建筑核查报告")
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            SkyPanel {
                 Text(task?.name ?: "未选择任务", style = MaterialTheme.typography.titleMedium)
                 OutlinedTextField(
                     value = reportName,
@@ -86,9 +90,12 @@ fun ReportScreen(
                     label = { Text("核查人员") },
                     modifier = Modifier.fillMaxWidth(),
                 )
-                Text("状态：${task?.status?.label ?: "-"}")
-                Text("建筑对象：${draft?.objectCount ?: 0}")
-                Text("已标注：${draft?.confirmedCount ?: 0} · 已排除：${draft?.rejectedCount ?: 0}")
+                Text("状态：${task?.status?.label ?: "-"}", style = MaterialTheme.typography.bodySmall)
+                Text("建筑对象：${draft?.objectCount ?: 0}", style = MaterialTheme.typography.bodySmall)
+                Text(
+                    "已标注：${draft?.confirmedCount ?: 0} · 已排除：${draft?.rejectedCount ?: 0}",
+                    style = MaterialTheme.typography.bodySmall,
+                )
                 draft?.typeCounts?.forEach { (type, count) ->
                     Text("${type.label}: $count", style = MaterialTheme.typography.bodySmall)
                 }
@@ -110,10 +117,15 @@ fun ReportScreen(
                                 }
                             },
                             label = { Text(format.label) },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = SkyEdgeColors.Field,
+                                selectedLabelColor = SkyEdgeColors.GreenDark,
+                            ),
                         )
                     }
                 }
-                Button(
+                SkyPrimaryButton(
+                    text = "生成报告",
                     onClick = {
                         task?.let {
                             viewModel.exportReport(
@@ -123,11 +135,12 @@ fun ReportScreen(
                         }
                     },
                     enabled = task != null,
-                ) {
-                    Text("生成报告")
-                }
+                )
                 uiState.lastReport?.files?.let { files ->
-                    ExportedFiles(files)
+                    Text("导出文件", style = MaterialTheme.typography.titleSmall)
+                    files.forEach { (format, path) ->
+                        Text("${format.label}: $path", style = MaterialTheme.typography.bodySmall)
+                    }
                 }
                 uiState.lastReport?.files?.get(ReportFormat.IMAGE)?.let { path ->
                     Text("长图预览", style = MaterialTheme.typography.titleSmall)
@@ -141,7 +154,8 @@ fun ReportScreen(
                     )
                 }
                 uiState.lastReport?.files?.values?.firstOrNull()?.let { path ->
-                    OutlinedButton(
+                    SkySecondaryButton(
+                        text = "系统分享",
                         onClick = {
                             val file = File(path)
                             val uri = FileProvider.getUriForFile(
@@ -162,140 +176,112 @@ fun ReportScreen(
                             }
                             context.startActivity(Intent.createChooser(intent, "分享报告"))
                         },
-                    ) {
-                        Text("系统分享")
-                    }
+                    )
                 }
             }
-        }
 
-        if (!draft?.anomalies.isNullOrEmpty()) {
-            AnomalyDetailList(draft?.anomalies.orEmpty())
-        }
+            val anomalies = draft?.anomalies.orEmpty()
+            if (anomalies.isNotEmpty()) {
+                AnomalyDetailList(anomalies)
+            }
 
-        DisasterSection(
-            pointCount = uiState.disasterTrack.points.size,
-            isCollecting = uiState.disasterTrack.isCollecting,
-            isClosed = uiState.disasterTrack.isClosed,
-            onStart = viewModel::startDisasterTrack,
-            onCaptureLocation = onCaptureLocation,
-            onFinish = viewModel::finishDisasterTrack,
-            onReset = viewModel::resetDisasterTrack,
-        )
+            SkyPanel {
+                Text("灾害范围校正", style = MaterialTheme.typography.titleMedium)
+                Text(
+                    "定位点：${uiState.disasterTrack.points.size} 个 · 状态：${
+                        when {
+                            uiState.disasterTrack.isClosed -> "已闭合"
+                            uiState.disasterTrack.isCollecting -> "采集中"
+                            else -> "未采集"
+                        }
+                    }",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                SkyPrimaryButton(text = "开始采集", onClick = viewModel::startDisasterTrack)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    SkySecondaryButton(
+                        text = "记录定位点",
+                        onClick = onCaptureLocation,
+                        enabled = uiState.disasterTrack.isCollecting,
+                        modifier = Modifier.weight(1f),
+                    )
+                    SkySecondaryButton(
+                        text = "保存范围",
+                        onClick = viewModel::finishDisasterTrack,
+                        enabled = uiState.disasterTrack.points.size >= 3,
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+                SkySecondaryButton(text = "重新采集", onClick = viewModel::resetDisasterTrack)
+            }
 
-        CompareSection(
-            historical = uiState.compareSession.historicalImageUri,
-            current = uiState.compareSession.currentImageUri,
-            slider = uiState.compareSession.slider,
-            samStatus = uiState.compareSession.samStatus,
-            onPickHistoricalImage = onPickHistoricalImage,
-            onPickCurrentImage = onPickCurrentImage,
-            onSlider = viewModel::setCompareSlider,
-            onSamClick = { viewModel.refineMaskAt(uiState.compareSession.slider, 0.5f) },
-        )
-    }
-}
-
-@Composable
-private fun ExportedFiles(files: Map<ReportFormat, String>) {
-    Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
-        Text("导出文件", style = MaterialTheme.typography.titleSmall)
-        files.forEach { (format, path) ->
-            Text("${format.label}: $path", style = MaterialTheme.typography.bodySmall)
+            SkyPanel {
+                Text("双时相对比与点选修正", style = MaterialTheme.typography.titleMedium)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    SkySecondaryButton(
+                        text = "选择历史图",
+                        onClick = onPickHistoricalImage,
+                        modifier = Modifier.weight(1f),
+                    )
+                    SkySecondaryButton(
+                        text = "选择本次图",
+                        onClick = onPickCurrentImage,
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+                Text(
+                    "历史：${uiState.compareSession.historicalImageUri ?: "未选择"}",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                Text(
+                    "本次：${uiState.compareSession.currentImageUri ?: "未选择"}",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                Text("卷帘位置：${(uiState.compareSession.slider * 100).toInt()}%")
+                Slider(
+                    value = uiState.compareSession.slider,
+                    onValueChange = viewModel::setCompareSlider,
+                )
+                SkySecondaryButton(
+                    text = "点选修正入口",
+                    onClick = { viewModel.refineMaskAt(uiState.compareSession.slider, 0.5f) },
+                )
+                Text(uiState.compareSession.samStatus, style = MaterialTheme.typography.bodySmall)
+            }
         }
     }
 }
 
 @Composable
 private fun AnomalyDetailList(anomalies: List<AnomalyUiModel>) {
-    Card(modifier.fillMaxWidth()) {
-        Column(modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Text("建筑明细", style = MaterialTheme.typography.titleMedium)
-            anomalies.forEach { anomaly ->
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
-                    if (anomaly.thumbnailPath.isNotBlank()) {
-                        AsyncImage(
-                            model = anomaly.thumbnailPath,
-                            contentDescription = "建筑缩略图",
-                            modifier = Modifier.size(72.dp),
-                            contentScale = ContentScale.Crop,
-                        )
-                    }
-                    Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                        Text("${anomaly.buildingCode.ifBlank { anomaly.id.take(8) }} · ${anomaly.anomalyType.label}")
-                        Text("${anomaly.reviewStatus.label} · ${anomaly.location.ifBlank { "暂无位置" }}", style = MaterialTheme.typography.bodySmall)
-                        if (anomaly.comment.isNotBlank()) {
-                            Text(anomaly.comment, style = MaterialTheme.typography.bodySmall)
-                        }
-                        if (anomaly.photoPaths.isNotEmpty()) {
-                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                anomaly.photoPaths.take(3).forEach { path ->
-                                    AsyncImage(
-                                        model = path,
-                                        contentDescription = "现场照片",
-                                        modifier = Modifier.size(52.dp),
-                                        contentScale = ContentScale.Crop,
-                                    )
-                                }
-                            }
-                        }
+    SkyPanel {
+        Text("建筑明细", style = MaterialTheme.typography.titleMedium)
+        anomalies.forEach { anomaly ->
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                if (anomaly.thumbnailPath.isNotBlank()) {
+                    AsyncImage(
+                        model = anomaly.thumbnailPath,
+                        contentDescription = "建筑缩略图",
+                        modifier = Modifier.size(72.dp),
+                        contentScale = ContentScale.Crop,
+                    )
+                }
+                Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                    Text(
+                        "${anomaly.buildingCode.ifBlank { anomaly.id.take(8) }} · ${anomaly.anomalyType.label}",
+                    )
+                    Text(
+                        "${anomaly.reviewStatus.label} · ${anomaly.location.ifBlank { "暂无位置" }}",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    if (anomaly.comment.isNotBlank()) {
+                        Text(anomaly.comment, style = MaterialTheme.typography.bodySmall)
                     }
                 }
             }
-        }
-    }
-}
-
-@Composable
-private fun DisasterSection(
-    pointCount: Int,
-    isCollecting: Boolean,
-    isClosed: Boolean,
-    onStart: () -> Unit,
-    onCaptureLocation: () -> Unit,
-    onFinish: () -> Unit,
-    onReset: () -> Unit,
-) {
-    Card(modifier.fillMaxWidth()) {
-        Column(modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("灾害范围校正", style = MaterialTheme.typography.titleMedium)
-            Text("定位点：$pointCount 个 · 状态：${if (isClosed) "已闭合" else if (isCollecting) "采集中" else "未采集"}")
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(onClick = onStart) { Text("开始采集") }
-                OutlinedButton(onClick = onCaptureLocation, enabled = isCollecting) { Text("记录定位点") }
-                OutlinedButton(onClick = onFinish, enabled = pointCount >= 3) { Text("保存范围") }
-                OutlinedButton(onClick = onReset) { Text("重新采集") }
-            }
-        }
-    }
-}
-
-@Composable
-private fun CompareSection(
-    historical: String?,
-    current: String?,
-    slider: Float,
-    samStatus: String,
-    onPickHistoricalImage: () -> Unit,
-    onPickCurrentImage: () -> Unit,
-    onSlider: (Float) -> Unit,
-    onSamClick: () -> Unit,
-) {
-    Card(modifier.fillMaxWidth()) {
-        Column(modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("双时相对比与点选修正", style = MaterialTheme.typography.titleMedium)
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(onClick = onPickHistoricalImage) { Text("选择历史图") }
-                OutlinedButton(onClick = onPickCurrentImage) { Text("选择本次图") }
-            }
-            Text("历史：${historical ?: "未选择"}", style = MaterialTheme.typography.bodySmall)
-            Text("本次：${current ?: "未选择"}", style = MaterialTheme.typography.bodySmall)
-            Text("卷帘位置：${(slider * 100).toInt()}%")
-            Slider(value = slider, onValueChange = onSlider)
-            OutlinedButton(onClick = onSamClick) {
-                Text("点选修正入口")
-            }
-            Text(samStatus, style = MaterialTheme.typography.bodySmall)
         }
     }
 }
